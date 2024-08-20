@@ -8,6 +8,9 @@ matplotlib = "*"
 numpy = "*"
 scipy = "*"
 pandas = "*"
+pywavelets = "*"
+scikit-learn = "*"
+requests = "*"
 
 [dev-packages]
 ipykernel = "*"
