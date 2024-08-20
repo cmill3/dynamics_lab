@@ -6,6 +6,11 @@ name = "pypi"
 [packages]
 matplotlib = "*"
 numpy = "*"
+pandas = "*"
+scipy = "*"
+statsmodels = "*"
+requests = "*"
+pywavelets = "*"
 
 [dev-packages]
 ipykernel = "*"
