@@ -4,3 +4,4 @@ Pipfile.lock
 *.pyc
 *.h5
 *.pkl
+*.keras
