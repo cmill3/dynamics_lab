@@ -1,2 +1,6 @@
 DATA/
 Pipfile.lock
+
+*.pyc
+*.h5
+*.pkl
