@@ -12,7 +12,7 @@ import tensorflow as tf
 import pdb
 from sklearn.preprocessing import StandardScaler
 from .sindy_utils import library_size, sindy_library
-from .model import SindyAutoencoder, PreSVD_SindyAutoencoder, RfeUpdateCallback, SindyCall
+from .model import SindyAutoencoder, PreSVDSindyAutoencoder, RfeUpdateCallback, SindyCall
 
 
 class TrainModel:
@@ -32,6 +32,50 @@ class TrainModel:
             name = pre + '_' + post
         return name 
     
+    # def fix_params(self, params):
+    #     input_dim = params['input_dim']
+    #     if params['svd_dim'] is not None:
+    #         print(params['svd_dim'])
+    #         print('Running SVD decomposition...')
+    #         input_dim = params['svd_dim']
+    #         reduced_dim = int(params['svd_dim'])
+            
+    #         # Transpose the input data to have shape (29677, 128)
+    #         X_transposed = self.data['x'].T
+            
+    #         # Perform SVD on the transposed data
+    #         U, s, VT = np.linalg.svd(X_transposed, full_matrices=False)
+            
+    #         # Take only the first 'reduced_dim' components
+    #         U_reduced = U[:, :reduced_dim]
+    #         s_reduced = s[:reduced_dim]
+            
+    #         # Compute the reduced representation
+    #         v = np.dot(U_reduced, np.diag(s_reduced))  # Shape will be (29677, 6)
+            
+    #         if params['scale'] == True:
+    #             scaler = StandardScaler()
+    #             v = scaler.fit_transform(v)
+            
+    #         self.data['xorig'] = self.data['x']
+    #         self.data['x'] = v  # Shape is (29677, 6)
+
+    #         print(self.data['x'].shape)
+
+    #         #  Assumes 1 IC 
+    #         self.data['dx'] = np.gradient(v, params['dt'], axis=0)
+    #         print('SVD Done!')
+        
+    #     print(self.data.keys())
+    #     print(self.data['t'].shape)
+    #     print(self.data['x'].shape)
+    #     print(self.data['dx'].shape)
+    #     print(self.data['z'].shape)
+    #     print(self.data['dz'].shape)
+    #     # print(self.data['sindy_coefficients'].shape)
+    #     print(self.data['xorig'].shape)
+
+        
     def fix_params(self, params):
         input_dim = params['input_dim']
         if params['svd_dim'] is not None:
@@ -39,18 +83,26 @@ class TrainModel:
             print('Running SVD decomposition...')
             input_dim = params['svd_dim']
             reduced_dim = int( params['svd_dim'] )
-            U, s, VT = np.linalg.svd(self.data.x, full_matrices=False)
+            U, s, VT = np.linalg.svd(self.data['x'], full_matrices=False)
             v = np.matmul(VT[:reduced_dim, :].T, np.diag(s[:reduced_dim]))
             if params['scale'] == True:
                 scaler = StandardScaler()
                 v = scaler.fit_transform(v)
-            self.data.xorig = self.data.x
-            self.data.x = v
+            self.data['xorig'] = self.data['x']
+            self.data['x'] = v.T
+
+            print(self.data['x'].shape)
+
             
             #  Assumes 1 IC 
-            self.data.dx = np.gradient(v, params['dt'], axis=0)
+            self.data['dx'] = np.gradient(v, params['dt'], axis=0).T
             print('SVD Done!')
             
+        print(self.data['x'].shape)
+        print(self.data['dx'].shape)
+        print(self.data['z'].shape)
+        print(self.data['dz'].shape)
+        # print(self.data['xorig'].shape)
         params['widths'] = [int(i*input_dim) for i in params['widths_ratios']]
         
         ## Constraining features according to model/case
@@ -81,22 +133,45 @@ class TrainModel:
 
     def get_data(self):
         # Split into train and test sets
-        train_x, test_x = train_test_split(self.data.x.T, train_size=self.params['train_ratio'], shuffle=False)
-        train_dx, test_dx = train_test_split(self.data.dx.T, train_size=self.params['train_ratio'], shuffle=False)
+        train_x, test_x = train_test_split(self.data['x'].T, train_size=self.params['train_ratio'], shuffle=False)
+        train_dx, test_dx = train_test_split(self.data['dx'].T, train_size=self.params['train_ratio'], shuffle=False)
         train_data = [train_x, train_dx]  
         test_data = [test_x, test_dx]  
         if self.params['svd_dim'] is not None:
-            train_xorig, test_xorig = train_test_split(self.data.xorig, train_size=self.params['train_ratio'], shuffle=False)
+            train_xorig, test_xorig = train_test_split(self.data['xorig'].T, train_size=self.params['train_ratio'], shuffle=False)
             train_data = [train_xorig] + train_data
             test_data = [test_xorig] + test_data 
             
         return train_data, test_data
 
+    # def get_data(self):
+    #     # Split into train and test sets
+    #     train_x, test_x = train_test_split(self.data['x'].T, train_size=self.params['train_ratio'], shuffle=False)
+    #     train_dx, test_dx = train_test_split(self.data['dx'].T, train_size=self.params['train_ratio'], shuffle=False)
+        
+    #     # Ensure all data has the same shape
+    #     train_x = np.expand_dims(train_x, axis=-1)
+    #     test_x = np.expand_dims(test_x, axis=-1)
+    #     train_dx = np.expand_dims(train_dx, axis=-1)
+    #     test_dx = np.expand_dims(test_dx, axis=-1)
+        
+    #     train_data = np.concatenate([train_x, train_dx], axis=-1)
+    #     test_data = np.concatenate([test_x, test_dx], axis=-1)
+        
+    #     if self.params['svd_dim'] is not None:
+    #         train_xorig, test_xorig = train_test_split(self.data['xorig'], train_size=self.params['train_ratio'], shuffle=False)
+    #         train_xorig = np.expand_dims(train_xorig, axis=-1)
+    #         test_xorig = np.expand_dims(test_xorig, axis=-1)
+    #         train_data = np.concatenate([train_xorig, train_data], axis=-1)
+    #         test_data = np.concatenate([test_xorig, test_data], axis=-1)
+    
+    #     return train_data, test_data
+
     def get_model(self):
         if self.params['svd_dim'] is None:
             model = SindyAutoencoder(self.params)
         else:
-            model = PreSVD_Sindy_Autoencoder(self.params)
+            model = PreSVDSindyAutoencoder(self.params)
         return model
 
     def fit(self):
@@ -113,6 +188,9 @@ class TrainModel:
         self.model.compile(optimizer=optimizer, loss='mse')
 
         callback_list = get_callbacks(self.params, self.savename, x=test_data[1])
+        print('Fitting model..')
+        for x in train_data:
+            print(x.shape)
         self.history = self.model.fit(
                 x=train_data, y=train_data, 
                 batch_size=self.params['batch_size'],
@@ -154,18 +232,19 @@ class TrainModel:
             
         # Save parameters
         # Create a DataFrame
+        os.makedirs(os.path.join(self.params['data_path'], self.savename), exist_ok=True)
         df = pd.DataFrame([saving_params])
-        df.to_pickle(os.path.join(saving_params['data_path'], self.savename + '_params.pkl'))
+        df.to_pickle(os.path.join(saving_params['data_path'], self.savename ,'model_params.pkl'))
             
     def save_results(self, model):
         print('Saving results..')
         print(self.get_results(model))
         df = pd.DataFrame([self.get_results(model)])
-        df.to_pickle(os.path.join(self.params['data_path'], self.savename + '_results.pkl'))
+        df.to_pickle(os.path.join(self.params['data_path'], self.savename,'model_results.pkl'))
 
         # Save model
         # pdb.set_trace()
-        model.save(os.path.join(self.params['data_path'], self.savename,'.keras'))
+        model.save(os.path.join(self.params['data_path'], self.savename,'model.keras'))
 
 #########################################################
 
@@ -188,7 +267,7 @@ def get_callbacks(params, savename, x=None, t=None):
     
     # Early stopping in when training stops improving
     if params['patience'] is not None:
-        callback_list.append(tf.keras.callbacks.EarlyStopping(patience=params['patience'], monitor='val_total_loss', mode='min', restore_best_weights=True))
+        callback_list.append(tf.keras.callbacks.EarlyStopping(patience=params['patience'], monitor='val_rec_loss', mode='min', restore_best_weights=True))
 
 
     # Learning rate scheduler - Decrease learning rate exponentially (include in callback if needed)

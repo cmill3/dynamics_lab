@@ -10,8 +10,10 @@ import numpy as np
 from aesindy.sindy_utils import sindy_simulate, sindy_library_names
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from aesindy.solvers import SynthData
+from aesindy.solvers import DatasetConstructorSynth, DatasetConstructor
 from aesindy.model import SindyAutoencoder, Sindy
+from aesindy.helper_functions import call_polygon
+
 
 import pickle5 as pickle
 import pandas as pd
@@ -65,8 +67,10 @@ def get_names(cases, path):
     name_list = []
     for name in directory:
         for case in cases:
-            if '.' not in name and case in name:
+            if '.pkl' not in name and case in name:
                 name_list.append(name)
+            else:
+                continue
     name_list = list(set(name_list))
 
     sortidx = np.argsort(np.array([int(s.split('_')[1]) for s in name_list]))[::-1]
@@ -76,10 +80,12 @@ def get_names(cases, path):
 
 
 def get_cases(path, filter_case=None, print_cases=True):
+    print('Cases:')
     directory = listdir(path)
+    print(directory)
     case_list = []
     for name in directory:
-        if '.' not in name:
+        if '.pkl' not in name:
             casename = '_'.join(name.split('_')[2:])
             if filter_case is not None:
                 if fcase in name:
@@ -173,11 +179,9 @@ def read_results(name_list,
                     end_time_plot=30, 
                     display_params=None, 
                     query_remove=False, 
-                    known_attractor=False,
-                    real_data=False,):
+                    known_attractor=False):
 
     varname = list('xyz123')
-    known_attractor = True
     non_existing_models = []
     non_existing_params = []
     remove_files = []
@@ -193,36 +197,46 @@ def read_results(name_list,
         
         params = pickle2dict(params)
         end_time_idx = int(end_time_plot/params['dt'])
+
+        ## temp solution
+        raw_data = call_polygon('SPY','2017-01-01','2024-07-01','minute',1)
+        raw_data = raw_data[['c']]
+        raw_data = raw_data.rename(columns={'c':'x'})
+        data_dict = {
+            'x':[raw_data['x'].values],
+            'dt': 60
+            }
+
         
         # FIX Experimental data
         # if real_data:
-        #     R = RealData(input_dim=params['input_dim'],
-        #     interpolate=params['interpolate'],
-        #     interp_dt=params['interp_dt'],
-        #     interp_kind=params['interp_kind'],
-        #     savgol_interp_coefs=params['interp_coefs'])
+        D = DatasetConstructor(input_dim=params['input_dim'],
+        interpolate=params['interpolate'],
+        interp_dt=params['interp_dt'],
+        interp_kind=params['interp_kind'],
+        savgol_interp_coefs=params['interp_coefs'])
 
-        #     R.build_solution(data)
+        D.build_solution(data_dict)
         # else:
-        S = SynthData(model=params['model'], 
-                args=params['system_coefficients'], 
-                noise=params['noise'], 
-                input_dim=params['input_dim'], 
-                normalization=params['normalization'])
-        print('Generating Test Solution...')
-        S.run_sim(1, end_time, params['dt'])
+        # D = DatasetConstructorSynth(model=params['model'], 
+        #         args=params['system_coefficients'], 
+        #         noise=params['noise'], 
+        #         input_dim=params['input_dim'], 
+        #         normalization=params['normalization'])
+        # print('Generating Test Solution...')
+        # D.run_sim(1, end_time, params['dt'])
     
 
         ## Get SVD data (write in separate function)
-        S = make_inputs_svd(S, params['svd_dim'], params['scale'], params['dt'])
+        # D = make_inputs_svd(D, params['svd_dim'], params['scale'], params['dt'])
             
         ## This seems arbitrary
         idx0 = int(start_time/params['dt']) 
         idx = int(end_time/params['dt']) 
-        test_data = [S.x[:, idx0:idx].T, S.dx[:, idx0:idx].T]
-        test_time = S.t[idx0:idx]
+        test_data = [D.x[:, idx0:idx].T, D.dx[:, idx0:idx].T]
+        test_time = D.t[idx0:idx]
         if params['svd_dim'] is not None:
-            test_data = [S.xorig[:, idx0:idx].T] +  test_data
+            test_data = [D.xorig[:, idx0:idx].T] +  test_data
 
         print("TEST DATA")
         print(test_data)
@@ -275,7 +289,7 @@ def read_results(name_list,
                                 params['poly_order'], params['include_sine'], exact_features=params['exact_features'])
         
         if known_attractor:
-            original_sim = sindy_simulate(z0, test_time, S.sindy_coefficients, params['poly_order'], params['include_sine'])
+            original_sim = sindy_simulate(z0, test_time, D.sindy_coefficients, params['poly_order'], params['include_sine'])
         else:
             original_sim = None
             

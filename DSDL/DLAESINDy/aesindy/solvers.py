@@ -86,6 +86,16 @@ class DatasetConstructor:
         self.interp_dt = interp_dt 
         self.savgol_interp_coefs = savgol_interp_coefs
         self.interp_kind = interp_kind
+
+    def get_data(self):
+        return {
+            't': self.t,
+            'x': self.x,
+            'dx': self.dx,
+            'z': self.z,
+            'dz': self.dz,
+            'sindy_coefficients': self.sindy_coefficients
+        }
     
     def build_solution(self, data):
         n_realizations = len(data['x'])

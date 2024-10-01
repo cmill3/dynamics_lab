@@ -85,14 +85,12 @@ def convert_timestamp_est(timestamp):
     return dt_est
 
 def call_polygon(symbol,from_str,to_str,timespan,multiplier):
-    if symbol == 'META':
-        date = datetime.strptime(from_str, "%Y-%m-%d")
-        if date < datetime(2022,6,9):
-            symbol = 'FB'
-        else:
-            symbol = 'META'
-    try:
-        url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/{multiplier}/{timespan}/{from_str}/{to_str}?adjusted=true&sort=asc&limit=50000&apiKey={KEY}"
+    all_results = []
+    url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/{multiplier}/{timespan}/{from_str}/{to_str}?adjusted=true&sort=asc&limit=50000&apiKey={KEY}"
+    next_url = url
+
+    while next_url:
+        # try:
         response = execute_polygon_call(url)
         response_data = json.loads(response.text)
         results = response_data['results']
@@ -103,10 +101,18 @@ def call_polygon(symbol,from_str,to_str,timespan,multiplier):
         results_df['day'] = results_df['date'].apply(lambda x: x.day)
         results_df['minute'] = results_df['date'].apply(lambda x: x.minute)
         results_df = results_df.loc[(results_df['hour'] >= 9) & (results_df['hour'] < 16)]
-    except Exception as e:
-        print(f"call polygon {e}")
-        print(f"symbol {symbol}, dates {from_str} -  {to_str}, timespan {timespan}, multiplier {multiplier}")
+        all_results.append(results_df)
+        # except Exception as e:
+        #     print(f"call polygon {e}")
+        #     print(f"symbol {symbol}, dates {from_str} -  {to_str}, timespan {timespan}, multiplier {multiplier}")
 
-    return results_df
+        if 'next_url' in response_data.keys():
+            next_url = response_data['next_url']
+            url = f"{next_url}&apiKey={KEY}"
+        else:
+            next_url = None
+
+    full_results = pd.concat(all_results)
+    return full_results
 
 

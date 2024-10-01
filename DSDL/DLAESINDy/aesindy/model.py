@@ -448,9 +448,9 @@ class SindyAutoencoder(tf.keras.Model):
 
 
 
-class PreSVD_SindyAutoencoder(tf.keras.Model):
+class PreSVDSindyAutoencoder(tf.keras.Model):
     def __init__(self, params, **kwargs):
-        super(PreSVD_SindyAutoencoder, self).__init__(**kwargs)
+        super(PreSVDSindyAutoencoder, self).__init__(**kwargs)
         self.params = params
         self.latent_dim = params['latent_dim']
         self.input_dim = params['input_dim']
@@ -505,7 +505,7 @@ class PreSVD_SindyAutoencoder(tf.keras.Model):
                 loss=tf.keras.losses.BinaryCrossentropy(),
                 sindy_optimizer=None,
                 **kwargs):
-        super(AutoencoderSindy, self).compile(optimizer=optimizer, loss=loss, **kwargs)
+        super(PreSVDSindyAutoencoder, self).compile(optimizer=optimizer, loss=loss, **kwargs)
         if sindy_optimizer is None:
             self.sindy_optimizer = tf.keras.optimizers.get(optimizer)
         else:
@@ -514,6 +514,7 @@ class PreSVD_SindyAutoencoder(tf.keras.Model):
     @tf.function
     def train_step(self, data):
         inputs, outputs = data
+
         x = inputs[0]
         v = inputs[1]
         dv_dt = tf.expand_dims(inputs[2], 2)
@@ -525,16 +526,51 @@ class PreSVD_SindyAutoencoder(tf.keras.Model):
         with tf.GradientTape() as tape:
             loss, losses = self.get_loss(x, v, dv_dt, x_out, v_out, dv_dt_out)
 
-        # split trainable variables for autoencoder and dynamics so that you can use seperate optimizers
-        trainable_vars = self.encoder.trainable_weights + self.decoder.trainable_weights + \
-                            self.sindy.trainable_weights
-        n_sindy_weights = len(self.sindy.trainable_weights)
-        grads = tape.gradient(total_loss, trainable_vars)
-        grads_autoencoder = grads[:-n_sindy_weights]
-        grads_sindy = grads[-n_sindy_weights:]
+        # # Get trainable variables
+        # trainable_vars = self.trainable_variables
+        # autoencoder_vars = self.encoder.trainable_variables + self.decoder.trainable_variables
+        # sindy_vars = self.sindy.trainable_variables
 
-        self.optimizer.apply_gradients(zip(grads_autoencoder, trainable_weights[:-n_sindy_weights]))
-        self.sindy_optimizer.apply_gradients(zip(grads_sindy, trainable_weights[-n_sindy_weights:]))
+        # # Calculate gradients
+        # grads = tape.gradient(loss, trainable_vars)
+
+        # # Split gradients
+        # n_autoencoder_vars = len(autoencoder_vars)
+        # grads_autoencoder = grads[:n_autoencoder_vars]
+        # grads_sindy = grads[n_autoencoder_vars:]
+
+        # # Apply gradients
+        # self.optimizer.apply_gradients(zip(grads_autoencoder, autoencoder_vars))
+        # self.sindy_optimizer.apply_gradients(zip(grads_sindy, sindy_vars))
+
+        # # Update losses
+        # self.update_losses(loss, losses)
+        # return {m.name: m.result() for m in self.metrics}
+
+        # split trainable variables for autoencoder and dynamics so that you can use seperate optimizers
+        # trainable_vars = self.encoder.trainable_weights + self.decoder.trainable_weights + \
+        #                     self.sindy.trainable_weights
+        # n_sindy_weights = len(self.sindy.trainable_weights)
+        # grads = tape.gradient(loss, trainable_vars)
+        # grads_autoencoder = grads[:-n_sindy_weights]
+        # grads_sindy = grads[-n_sindy_weights:]
+
+        # # autoencoder_weights = self.encoder.trainable_weights + self.decoder.trainable_weights
+        # # sindy_weights = self.sindy.trainable_weights
+        # print('trainable_vars: ', trainable_vars)
+        # print('grads: ', grads)
+        # print('grads_autoencoder: ', grads_autoencoder)
+        # print('grads_sindy: ', grads_sindy)
+        # print('sindy_weights: ', self.sindy.trainable_weights)
+        # print('decoder_weights: ', self.decoder.trainable_weights)
+        # print('encoder_weights: ', self.encoder.trainable_weights)
+        # self.optimizer.apply_gradients(zip(grads_autoencoder, trainable_vars[:-n_sindy_weights]))
+        # self.sindy_optimizer.apply_gradients(zip(grads_sindy, trainable_vars[-n_sindy_weights:]))
+            
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradient(loss, trainable_vars)
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    
 
         ## Keep track and update losses
         self.update_losses(loss, losses)
