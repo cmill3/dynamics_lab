@@ -12,7 +12,7 @@ import tensorflow as tf
 import pdb
 from sklearn.preprocessing import StandardScaler
 from .sindy_utils import library_size, sindy_library
-from .model import SindyAutoencoder, PreSVDSindyAutoencoder, RfeUpdateCallback, SindyCall
+from .model import SindyAutoencoder, RfeUpdateCallback, SindyCall
 
 
 class TrainModel:
@@ -168,10 +168,10 @@ class TrainModel:
     #     return train_data, test_data
 
     def get_model(self):
-        if self.params['svd_dim'] is None:
-            model = SindyAutoencoder(self.params)
-        else:
-            model = PreSVDSindyAutoencoder(self.params)
+        # if self.params['svd_dim'] is None:
+        model = SindyAutoencoder(self.params)
+        # else:
+        #     model = PreSVDSindyAutoencoder(self.params)
         return model
 
     def fit(self):
@@ -185,7 +185,8 @@ class TrainModel:
         
         # Build model and fit
         optimizer = tf.keras.optimizers.Adam(learning_rate=self.params['learning_rate'])
-        self.model.compile(optimizer=optimizer, loss='mse')
+        sindy_optimizer = tf.keras.optimizers.Adam(learning_rate=self.params['sindy_learning_rate'])
+        self.model.compile(optimizer=optimizer, sindy_optimizer=sindy_optimizer, loss='mse')
 
         callback_list = get_callbacks(self.params, self.savename, x=test_data[1])
         print('Fitting model..')

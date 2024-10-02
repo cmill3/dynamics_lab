@@ -27,6 +27,9 @@ params['scale'] = False
 params['save_checkpoints'] = True 
 params['save_freq'] = 5 
 
+params['sindy_learning_rate'] = 0.01 
+params['learning_rate'] = 1e-3
+
 params['print_progress'] = True
 params['print_frequency'] = 10
 
