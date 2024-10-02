@@ -31,49 +31,6 @@ class TrainModel:
         else:
             name = pre + '_' + post
         return name 
-    
-    # def fix_params(self, params):
-    #     input_dim = params['input_dim']
-    #     if params['svd_dim'] is not None:
-    #         print(params['svd_dim'])
-    #         print('Running SVD decomposition...')
-    #         input_dim = params['svd_dim']
-    #         reduced_dim = int(params['svd_dim'])
-            
-    #         # Transpose the input data to have shape (29677, 128)
-    #         X_transposed = self.data['x'].T
-            
-    #         # Perform SVD on the transposed data
-    #         U, s, VT = np.linalg.svd(X_transposed, full_matrices=False)
-            
-    #         # Take only the first 'reduced_dim' components
-    #         U_reduced = U[:, :reduced_dim]
-    #         s_reduced = s[:reduced_dim]
-            
-    #         # Compute the reduced representation
-    #         v = np.dot(U_reduced, np.diag(s_reduced))  # Shape will be (29677, 6)
-            
-    #         if params['scale'] == True:
-    #             scaler = StandardScaler()
-    #             v = scaler.fit_transform(v)
-            
-    #         self.data['xorig'] = self.data['x']
-    #         self.data['x'] = v  # Shape is (29677, 6)
-
-    #         print(self.data['x'].shape)
-
-    #         #  Assumes 1 IC 
-    #         self.data['dx'] = np.gradient(v, params['dt'], axis=0)
-    #         print('SVD Done!')
-        
-    #     print(self.data.keys())
-    #     print(self.data['t'].shape)
-    #     print(self.data['x'].shape)
-    #     print(self.data['dx'].shape)
-    #     print(self.data['z'].shape)
-    #     print(self.data['dz'].shape)
-    #     # print(self.data['sindy_coefficients'].shape)
-    #     print(self.data['xorig'].shape)
 
         
     def fix_params(self, params):
@@ -97,11 +54,7 @@ class TrainModel:
             #  Assumes 1 IC 
             self.data['dx'] = np.gradient(v, params['dt'], axis=0).T
             print('SVD Done!')
-            
-        print(self.data['x'].shape)
-        print(self.data['dx'].shape)
-        print(self.data['z'].shape)
-        print(self.data['dz'].shape)
+
         # print(self.data['xorig'].shape)
         params['widths'] = [int(i*input_dim) for i in params['widths_ratios']]
         
@@ -134,13 +87,18 @@ class TrainModel:
     def get_data(self):
         # Split into train and test sets
         train_x, test_x = train_test_split(self.data['x'].T, train_size=self.params['train_ratio'], shuffle=False)
+        # val_x, test_x = train_test_split(val_x, train_size=self.params['test_ratio'], shuffle=False)
         train_dx, test_dx = train_test_split(self.data['dx'].T, train_size=self.params['train_ratio'], shuffle=False)
+        # val_dx, test_dx = train_test_split(val_dx, train_size=self.params['test_ratio'], shuffle=False)
         train_data = [train_x, train_dx]  
         test_data = [test_x, test_dx]  
+        # val_data = [val_x, val_dx]
         if self.params['svd_dim'] is not None:
             train_xorig, test_xorig = train_test_split(self.data['xorig'].T, train_size=self.params['train_ratio'], shuffle=False)
+            # val_xorig, test_xorig = train_test_split(val_xorig, train_size=self.params['test_ratio'], shuffle=False)
             train_data = [train_xorig] + train_data
             test_data = [test_xorig] + test_data 
+            # val_data = [val_xorig] + val_data
             
         return train_data, test_data
 
@@ -201,6 +159,11 @@ class TrainModel:
         
         if self.params['case'] != 'lockunlock':
             prediction = self.model.predict(test_data)
+            print(" tesrt data")
+            ndtest = np.array(test_data)
+            print(ndtest.shape)
+            print("Prediction")
+            print(prediction.shape)
             self.save_results(self.model)
             
         else: # Used to make SINDy coefficients trainable 
@@ -217,6 +180,8 @@ class TrainModel:
                     callbacks=callback_list,
                     shuffle=True)
             prediction = self.model_unlock.predict(test_data)
+            print("Prediction")
+            print(prediction)
             self.save_results(self.model_unlock)
         return prediction
         
