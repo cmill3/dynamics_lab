@@ -20,7 +20,7 @@ params['tend'] = 2
 params['poly_order'] = 2
 params['include_sine'] = False
 params['fix_coefs'] = False
-params['svd_dim'] = 2
+params['svd_dim'] = None
 params['latent_dim'] = 2
 params['scale'] = False
 

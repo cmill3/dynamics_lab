@@ -66,7 +66,7 @@ class Sindy(layers.Layer):
                  state_dim, 
                  poly_order, 
                  model='lorenz', 
-                 initializer='constant', 
+                 coefficient_initialization='constant', 
                  actual_coefs=None, 
                  rfe_threshold=None, 
                  include_sine=False, 
@@ -95,33 +95,60 @@ class Sindy(layers.Layer):
         self.l1 = 0.0 
 
         ## INITIALIZE COEFFICIENTS
-        if type(initializer) == np.ndarray:
-            self.coefficients_mask = tf.Variable(initial_value=np.abs(initializer)>1e-10, dtype=tf.float32)
-            self.coefficients = tf.Variable(initial_value= initializer, name='sindy_coeffs', dtype=tf.float32)
+        if isinstance(coefficient_initialization, np.ndarray):
+            self.coefficients_mask = tf.Variable(initial_value=np.abs(coefficient_initialization)>1e-10, dtype=tf.float32, trainable=False)
+            self.coefficients = tf.Variable(initial_value=coefficient_initialization, name='sindy_coeffs', dtype=tf.float32, trainable=not fix_coefs)
+        elif coefficient_initialization == 'true':
+            self.coefficients_mask = tf.Variable(initial_value=np.abs(actual_coefs)>1e-10, dtype=tf.float32, trainable=False)
+            self.coefficients = tf.Variable(initial_value=actual_coefs + sindy_pert*(np.random.random(actual_coefs.shape)-0.5), 
+                                            name='sindy_coeffs', dtype=tf.float32, trainable=not fix_coefs)
         else:
-            if initializer == 'true':
-                self.coefficients_mask = tf.Variable(initial_value=np.abs(actual_coefs)>1e-10, dtype=tf.float32)
-                self.coefficients = tf.Variable(initial_value=actual_coefs + sindy_pert*(np.random.random(actual_coefs.shape)-0.5), name='sindy_coeffs', dtype=tf.float32)
+            if coefficient_initialization == 'variance_scaling':
+                init = tf.keras.initializers.VarianceScaling(scale=10, mode='fan_in', distribution='uniform')
+            elif coefficient_initialization == 'constant':
+                init = tf.constant_initializer(0.0)
+            elif not isinstance(coefficient_initialization, str):
+                init = tf.constant_initializer(coefficient_initialization)
+            elif coefficient_initialization == 'random_normal':
+                init = tf.keras.initializers.RandomNormal(mean=0.0, stddev=10.0)
             else:
-                if initializer == 'variance_scaling':
-                    init = tf.keras.initializers.VarianceScaling(scale=10, mode='fan_in', distribution='uniform')
-                elif initializer == 'constant':
-                    init = tf.constant_initializer(0.0)
-                elif type(initializer) != str:
-                    init = tf.constant_initializer(initializer)
-                elif initializer == 'random_normal':
-                    init = tf.keras.initializers.RandomNormal(mean=0.0, stddev=10.0)
-                else:
-                    raise Exception("initializer string doesn't exist")
-                self.coefficients_mask =  tf.Variable(initial_value=np.ones((self.library_dim, self.state_dim)), dtype=tf.float32)
-                self.coefficients = tf.Variable(init(shape=(self.library_dim, self.state_dim)), name='sindy_coeffs', dtype=tf.float32)
+                raise ValueError("Invalid initializer string")
+            
+            self.coefficients_mask = tf.Variable(initial_value=np.ones((self.library_dim, self.state_dim)), 
+                                                 dtype=tf.float32, trainable=False)
+            self.coefficients = tf.Variable(init(shape=(self.library_dim, self.state_dim)), 
+                                            name='sindy_coeffs', dtype=tf.float32, trainable=not fix_coefs)
+        # if type(coefficient_initialization) == np.ndarray:
+        #     self.coefficients_mask = tf.Variable(initial_value=np.abs(coefficient_initialization)>1e-10, dtype=tf.float32)
+        #     self.coefficients = tf.Variable(initial_value= coefficient_initialization, name='sindy_coeffs', dtype=tf.float32)
+        # else:
+        #     if coefficient_initialization == 'true':
+        #         self.coefficients_mask = tf.Variable(initial_value=np.abs(actual_coefs)>1e-10, dtype=tf.float32)
+        #         self.coefficients = tf.Variable(initial_value=actual_coefs + sindy_pert*(np.random.random(actual_coefs.shape)-0.5), name='sindy_coeffs', dtype=tf.float32)
+        #     else:
+        #         if coefficient_initialization == 'variance_scaling':
+        #             init = tf.keras.initializers.VarianceScaling(scale=10, mode='fan_in', distribution='uniform')
+        #         elif coefficient_initialization == 'constant':
+        #             init = tf.constant_initializer(0.0)
+        #         elif type(coefficient_initialization) != str:
+        #             init = tf.constant_initializer(coefficient_initialization)
+        #         elif coefficient_initialization == 'random_normal':
+        #             init = tf.keras.initializers.RandomNormal(mean=0.0, stddev=10.0)
+        #         else:
+        #             raise Exception("initializer string doesn't exist")
+        #         self.coefficients_mask =  tf.Variable(initial_value=np.ones((self.library_dim, self.state_dim)), dtype=tf.float32)
+        #         self.coefficients = tf.Variable(init(shape=(self.library_dim, self.state_dim)), name='sindy_coeffs', dtype=tf.float32)
 
-        if self.fix_coefs:
-            self.coefficients = tf.Variable(initial_value=actual_coefs, name='sindy_coeffs', trainable=False, dtype=tf.float32)
+        # if self.fix_coefs:
+        #     self.coefficients = tf.Variable(initial_value=actual_coefs, name='sindy_coeffs', trainable=False, dtype=tf.float32)
             
         ## ODE NET
         if self.ode_net:
             self.net_model = self.make_theta_network(self.library_dim, self.ode_net_widths)
+        
+    @property
+    def trainable_variables(self):
+        return [self.coefficients] if not self.fix_coefs else []
 
     def make_theta_network(self, output_dim, widths):
         out_activation = 'linear'
@@ -246,7 +273,7 @@ class SindyAutoencoder(tf.keras.Model):
         self.library_dim = params['library_dim']
         self.poly_order = params['poly_order']
         self.include_sine = params['include_sine']
-        self.initializer = params['coefficient_initialization'] # fix That's sindy's!
+        self.coefficient_initialization = params['coefficient_initialization'] # fix That's sindy's!
         self.epochs = params['max_epochs'] # fix That's sindy's!
         self.rfe_threshold = params['coefficient_threshold']
         self.rfe_frequency = params['threshold_frequency']
@@ -272,7 +299,7 @@ class SindyAutoencoder(tf.keras.Model):
         if not self.trainable_auto:
             self.encoder._trainable = False
             self.decoder._trainable = False
-        self.sindy = Sindy(self.library_dim, self.latent_dim, self.poly_order, model=params['model'], initializer=self.initializer, actual_coefs=self.actual_coefs, rfe_threshold=self.rfe_threshold, include_sine=self.include_sine, exact_features=params['exact_features'], fix_coefs=params['fix_coefs'], sindy_pert=self.sindy_pert, ode_net=params['ode_net'], ode_net_widths=params['ode_net_widths'])
+        self.sindy = Sindy(self.library_dim, self.latent_dim, self.poly_order, model=params['model'], coefficient_initialization=self.coefficient_initialization, actual_coefs=self.actual_coefs, rfe_threshold=self.rfe_threshold, include_sine=self.include_sine, exact_features=params['exact_features'], fix_coefs=params['fix_coefs'], sindy_pert=self.sindy_pert, ode_net=params['ode_net'], ode_net_widths=params['ode_net_widths'])
 
     
     def make_network(self, input_dim, output_dim, widths, name):
@@ -331,6 +358,10 @@ class SindyAutoencoder(tf.keras.Model):
         
         trainable_vars = encoder_vars + decoder_vars + sindy_vars
 
+        print("Number of encoder variables:", len(encoder_vars))
+        print("Number of decoder variables:", len(decoder_vars))
+        print("Number of SINDy variables:", len(sindy_vars))
+
         grads = tape.gradient(loss, trainable_vars)
 
         # Split gradients
@@ -338,17 +369,15 @@ class SindyAutoencoder(tf.keras.Model):
         grads_autoencoder = grads[:n_autoencoder_vars]
         grads_sindy = grads[n_autoencoder_vars:]
 
-        print("Number of encoder variables:", len(encoder_vars))
-        print("Number of decoder variables:", len(decoder_vars))
-        print("Number of SINDy variables:", len(sindy_vars))
         print("Total number of gradients:", len(grads))
         print("Number of autoencoder gradients:", len(grads_autoencoder))
         print("Number of SINDy gradients:", len(grads_sindy))
+
         # Apply gradients
         if self.trainable_auto:
             self.optimizer.apply_gradients(zip(grads_autoencoder, encoder_vars + decoder_vars))
-        self.sindy_optimizer.apply_gradients(zip(grads_sindy, sindy_vars))
-
+        if sindy_vars:  # Only apply if there are trainable SINDy variables
+            self.sindy_optimizer.apply_gradients(zip(grads_sindy, sindy_vars))
 
         # Update losses
         self.update_losses(loss, losses)
@@ -418,6 +447,7 @@ class SindyAutoencoder(tf.keras.Model):
             dz_dt = tf.matmul( dz_dx, dx_dt )
         else:
             z = self.encoder(x, training=self.trainable_auto)
+
 
         if self.params['loss_weight_sindy_x'] > 0.0:
             with tf.GradientTape() as t2:
