@@ -12,7 +12,8 @@ import tensorflow as tf
 import pdb
 from sklearn.preprocessing import StandardScaler
 from .sindy_utils import library_size, sindy_library
-from .model import SindyAutoencoder, PreSVDSindyAutoencoder, RfeUpdateCallback, SindyCall
+from .model import SindyAutoencoder, RfeUpdateCallback, SindyCall
+import wandb
 
 
 class TrainModel:
@@ -147,8 +148,6 @@ class TrainModel:
 
         callback_list = get_callbacks(self.params, self.savename, x=test_data[1])
         print('Fitting model..')
-        for x in train_data:
-            print(x.shape)
         self.history = self.model.fit(
                 x=train_data, y=train_data, 
                 batch_size=self.params['batch_size'],
@@ -159,11 +158,7 @@ class TrainModel:
         
         if self.params['case'] != 'lockunlock':
             prediction = self.model.predict(test_data)
-            print(" tesrt data")
             ndtest = np.array(test_data)
-            print(ndtest.shape)
-            print("Prediction")
-            print(prediction.shape)
             self.save_results(self.model)
             
         else: # Used to make SINDy coefficients trainable 
@@ -180,8 +175,6 @@ class TrainModel:
                     callbacks=callback_list,
                     shuffle=True)
             prediction = self.model_unlock.predict(test_data)
-            print("Prediction")
-            print(prediction)
             self.save_results(self.model_unlock)
         return prediction
         
@@ -216,6 +209,10 @@ class TrainModel:
 
 #########################################################
 #########################################################
+        
+class WandbCallback(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        wandb.log({"epoch": epoch})
 
 def get_callbacks(params, savename, x=None, t=None):
     callback_list = []
@@ -225,6 +222,10 @@ def get_callbacks(params, savename, x=None, t=None):
         root_logdir = os.path.join(current_dir, 'my_logs')
         run_id = time.strftime("run_%Y_%m_%d-%H_%M_%S_")
         return os.path.join(root_logdir, run_id)
+    
+    # Add WandbCallback
+    if params['use_wandb']:
+        callback_list.append(WandbCallback())
 
     # Update coefficient_mask callback
     if params['coefficient_threshold'] is not None:
