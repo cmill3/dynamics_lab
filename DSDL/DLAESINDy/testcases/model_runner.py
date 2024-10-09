@@ -34,19 +34,26 @@ params['max_epochs'] = 300
 params['patience'] = 40
 # loss function weighting
 params['loss_weight_rec'] = 0.3
-params['loss_weight_sindy_z'] = 0.0
-params['loss_weight_sindy_x'] = 0.0
-params['loss_weight_sindy_regularization'] = 1e-3
+params['loss_weight_sindy_z'] = 0.001
+params['loss_weight_sindy_x'] = 0.001
+params['loss_weight_sindy_regularization'] = .01
 params['loss_weight_integral'] = 0.05
 params['loss_weight_x0'] = 0.01
 params['loss_weight_layer_l2'] = 0.0
 params['loss_weight_layer_l1'] = 0.0 
 params['widths_ratios'] = [0.75, 0.5, 0.25]
+params['use_wandb'] = False
+params['coefficient_threshold'] = 4 ## set to none for turning off RFE
+params['threshold_frequency'] = 10
+params['use_sindycall'] = True
+params['sindy_threshold'] = 0.2
+params['sindy_init_scale'] = 7.0
 
 
 
 
-raw_data = call_polygon('SPY','2012-01-01','2024-02-01','hour',1)
+
+raw_data = call_polygon('SPY','2012-01-01','2024-02-01','minute',15)
 raw_data = raw_data[['c']]
 raw_data = raw_data.rename(columns={'c':'x'})
 data_dict = {

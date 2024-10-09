@@ -12,11 +12,10 @@ from tensorflow.keras.callbacks import Callback
 
     
 class SindyCall(tf.keras.callbacks.Callback):
-    def __init__(self, threshold, update_freq, x, t):
+    def __init__(self, threshold, update_freq, x):
         super(SindyCall, self).__init__()
         self.threshold = threshold 
         self.update_freq = update_freq
-        self.t = t
         self.x = x
         
     def on_epoch_end(self, epoch, logs=None):
@@ -91,6 +90,7 @@ class Sindy(layers.Layer):
                  sindy_pert=0.0, 
                  ode_net=False,
                  ode_net_widths=[1.5, 2.0],
+                 init_scale=7.0,
                  **kwargs):
         super(Sindy, self).__init__(**kwargs)
         
@@ -104,6 +104,7 @@ class Sindy(layers.Layer):
         self.fix_coefs = fix_coefs
         self.sindy_pert = sindy_pert 
         self.model = model
+        self.init_scale = init_scale
         
         self.ode_net = ode_net 
         self.ode_net_widths = ode_net_widths
@@ -111,6 +112,7 @@ class Sindy(layers.Layer):
         self.l1 = 0.0 
 
         ## INITIALIZE COEFFICIENTS
+
         if type(initializer) == np.ndarray:
             self.coefficients_mask = tf.Variable(initial_value=np.abs(initializer)>1e-10, dtype=tf.float32)
             self.coefficients = tf.Variable(initial_value= initializer, name='sindy_coeffs', dtype=tf.float32)
@@ -126,11 +128,24 @@ class Sindy(layers.Layer):
                 elif type(initializer) != str:
                     init = tf.constant_initializer(initializer)
                 elif initializer == 'random_normal':
-                    init = tf.keras.initializers.RandomNormal(mean=0.0, stddev=10.0)
+                    init = tf.keras.initializers.RandomNormal(mean=0.0, stddev=init_scale)
                 else:
                     raise Exception("initializer string doesn't exist")
-                self.coefficients_mask =  tf.Variable(initial_value=np.ones((self.library_dim, self.state_dim)), dtype=tf.float32)
-                self.coefficients = tf.Variable(init(shape=(self.library_dim, self.state_dim)), name='sindy_coeffs', dtype=tf.float32)
+                
+                self.coefficients = self.add_weight(
+                    shape=(self.library_dim, self.state_dim),
+                    initializer='random_normal',
+                    trainable=True,
+                    name='coefficients'
+                )
+                self.coefficients_mask = self.add_weight(
+                    shape=(self.library_dim, self.state_dim),
+                    initializer='ones',
+                    trainable=False,
+                    name='coefficients_mask'
+)
+
+
 
         if self.fix_coefs:
             self.coefficients = tf.Variable(initial_value=actual_coefs, name='sindy_coeffs', trainable=False, dtype=tf.float32)
@@ -164,8 +179,12 @@ class Sindy(layers.Layer):
     
     def update_mask(self):
         if self.rfe_threshold is not None:
+            print()
+            print('--- Running RFE ---')
             self.coefficients_mask.assign( tf.cast( tf.abs(self.coefficients) > self.rfe_threshold ,tf.float32) )
-#             self.coefficients.assign(tf.multiply(self.coefficients_mask, self.coefficients))
+            self.coefficients.assign(tf.multiply(self.coefficients_mask, self.coefficients))
+            print(self.coefficients_mask)
+            print(self.coefficients)
 
     
     @tf.function 
@@ -288,7 +307,10 @@ class SindyAutoencoder(tf.keras.Model):
         if not self.trainable_auto:
             self.encoder._trainable = False
             self.decoder._trainable = False
-        self.sindy = Sindy(self.library_dim, self.latent_dim, self.poly_order, model=params['model'], initializer=self.initializer, actual_coefs=self.actual_coefs, rfe_threshold=self.rfe_threshold, include_sine=self.include_sine, exact_features=params['exact_features'], fix_coefs=params['fix_coefs'], sindy_pert=self.sindy_pert, ode_net=params['ode_net'], ode_net_widths=params['ode_net_widths'])
+        self.sindy = Sindy(self.library_dim, self.latent_dim, self.poly_order, model=params['model'], 
+                           initializer=self.initializer, actual_coefs=self.actual_coefs, rfe_threshold=self.rfe_threshold, 
+                           include_sine=self.include_sine, exact_features=params['exact_features'], fix_coefs=params['fix_coefs'], sindy_pert=self.sindy_pert, 
+                           ode_net=params['ode_net'], ode_net_widths=params['ode_net_widths'], init_scale=params['sindy_init_scale'])
 
     
     def make_network(self, input_dim, output_dim, widths, name):
@@ -337,11 +359,6 @@ class SindyAutoencoder(tf.keras.Model):
         ## Keep track and update losses
         self.update_losses(loss, losses)
         metrics =  {m.name: m.result() for m in self.metrics}
-        # print("TRAIN")
-        # print(metrics)
-        # wandb.log({"train_" + k: v for k, v in metrics.items()})
-        print(rec_met.result())
-        # wandb.log({"train_rec_loss" + rec_met.result().numpy()})
         return metrics
 
     
@@ -358,9 +375,6 @@ class SindyAutoencoder(tf.keras.Model):
         ## Keep track and update losses
         self.update_losses(loss, losses)
         metrics =  {m.name: m.result() for m in self.metrics}
-        # print("TEST")
-        # print(metrics)
-        # wandb.log({"val_" + k: v for k, v in metrics.items()})
         return metrics
 
     

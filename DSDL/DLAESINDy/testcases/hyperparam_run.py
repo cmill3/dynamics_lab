@@ -9,6 +9,7 @@ from aesindy.solvers import DatasetConstructor
 from aesindy.training import TrainModel
 from aesindy.helper_functions import call_polygon
 import wandb
+from wandb.integration.keras import WandbMetricsLogger, WandbModelCheckpoint
 
 def update_params_from_wandb(params, wandb_config):
     """
@@ -37,6 +38,8 @@ def model_runner(wandb_params, raw_data):
     params = update_params_from_wandb(default_params, wandb_params)
     params['model'] = 'spy'
     params['case'] = '1hr_3rd_dim64_ld3_sine_x001'
+    params['use_wandb'] = True
+    params['dt'] = 900
     ## slice the data based on a fractional proportion, must remain in sequential order
     raw_data = raw_data[int(params['data_length']*len(raw_data)):]
     data_dict = {
@@ -71,19 +74,28 @@ def wandb_sweep():
             'goal': 'minimize'
         },
         "parameters": {
-            "num_epochs": {'values': [450]},
             "learning_rate": {'values': [0.1,0.01,0.03,0.001]},
-            "latent_dim": {'values': [1,2,3,4]},
+            "latent_dim": {'values': [2,3,4,5]},
             "input_dim": {'values': [50,100,200,400]},
-            "poly_order": {'values': [1,2,3,4]},
+            "poly_order": {'values': [2,3,4]},
             "include_sine": {'values': [True, False]},
             "loss_weight_layer_l2": {'values': [.0,0.1]},
-            "loss_weight_x0": {'values': [0,0.01]},
+            "loss_weight_x0": {'values': [0,0.01,0.1]},
             "loss_weight_integral": {'values': [0,0.05,0.1]},
-            "loss_weight_sindy_regularization": {'values': [1e-5,1e-3]},
-            "loss_weight_rec": {'values': [0.3,0.5]},
+            "loss_weight_sindy_regularization": {'values': [1e-5,1e-3,1e-1]},
+            "loss_weight_rec": {'values': [0.25,0.5,0.75]},
+            "loss_weight_sindy_z": {'values': [0.001,0.01,0.1]},
+            "loss_weight_sindy_x": {'values': [0.001,0.01,0.1]},
             "batch_size": {'values': [32,128]},
             "data_length": {'values': [0,.25,.5,.75]},
+            "widths_ratios": {'values': [[0.5,0.25],[0.75,0.5,0.25],[0.8,0.6,0.4,0.2]]},
+            "activation": {'values': ['elu','relu','tanh']},
+            "use_bias": {'values': [True, False]},
+            "sindy_threshold": {'values': [0.01,0.1,0.2,0.3]},
+            "sindy_init_scale": {'values': [3.0,5.0,7.0,10.0]},
+            "threshold_frequency": {'values': [10,20,40]},
+            "coefficient_threshold": {'values': [0.5,1,2,3,4]},
+            "sindycall_freq": {'values': [10,20,40]},
         }
     }
 
@@ -93,11 +105,11 @@ def wandb_sweep():
     # Define the objective function for the sweep
     def sweep_train():
 
-        wandb.init(project="DLAESINDy")
+        wandb.init(project="DLAESINDy", config=wandb.config)
         model_runner(wandb.config, raw_data)
 
     # Start the sweep
-    wandb.agent(sweep_id, function=sweep_train, count=500) 
+    wandb.agent(sweep_id, function=sweep_train, count=800) 
 
 
 if __name__ == '__main__':

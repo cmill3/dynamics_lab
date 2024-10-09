@@ -14,6 +14,7 @@ from sklearn.preprocessing import StandardScaler
 from .sindy_utils import library_size, sindy_library
 from .model import SindyAutoencoder, RfeUpdateCallback, SindyCall
 import wandb
+from wandb.integration.keras import WandbMetricsLogger
 
 
 class TrainModel:
@@ -129,8 +130,6 @@ class TrainModel:
     def get_model(self):
         if self.params['svd_dim'] is None:
             model = SindyAutoencoder(self.params)
-        else:
-            model = PreSVDSindyAutoencoder(self.params)
         return model
 
     def fit(self):
@@ -146,8 +145,9 @@ class TrainModel:
         optimizer = tf.keras.optimizers.Adam(learning_rate=self.params['learning_rate'])
         self.model.compile(optimizer=optimizer, loss='mse')
 
-        callback_list = get_callbacks(self.params, self.savename, x=test_data[1])
+        callback_list = get_callbacks(self.params, train_data, self.savename, x=test_data[1])
         print('Fitting model..')
+        print(f"Ca;;back list: {callback_list}")
         self.history = self.model.fit(
                 x=train_data, y=train_data, 
                 batch_size=self.params['batch_size'],
@@ -210,22 +210,53 @@ class TrainModel:
 #########################################################
 #########################################################
         
-class WandbCallback(tf.keras.callbacks.Callback):
-    def on_epoch_end(self, epoch, logs=None):
-        wandb.log({"epoch": epoch})
+class LogCollector(tf.keras.callbacks.Callback):
+    def __init__(self):
+        super().__init__()
+        self.logs = []
 
-def get_callbacks(params, savename, x=None, t=None):
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        self.logs.append(logs)
+
+    def on_batch_end(self,batch, logs=None):
+        logs = logs or {}
+        self.logs.append(logs)
+
+class CustomTerminateOnNaN(tf.keras.callbacks.Callback):
+    def __init__(self, log_collector=None):
+        super().__init__()
+        self.log_collector = log_collector
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        loss = logs.get('rec_loss')
+        if loss is not None:
+            if np.isnan(loss) or np.isinf(loss):
+                print('Batch %d: Invalid loss, terminating training' % (epoch))
+                self.model.stop_training = True
+
+
+
+def get_callbacks(params, data, savename, x=None, t=None):
     callback_list = []
+
+    callback_list.append(tf.keras.callbacks.TerminateOnNaN())
+
+    log_collector = LogCollector()
+    callback_list.append(log_collector)
+    callback_list.append(CustomTerminateOnNaN(log_collector))
+    # # Terminate on NaN
+    # callback_list.append(CustomTerminateOnNaN())
+
+    if params['use_wandb']:
+            callback_list.append(WandbMetricsLogger(log_freq='epoch'))
     
     ## Tensorboad Saving callback - Good for analyzing results
     def get_run_logdir(current_dir=os.curdir):
         root_logdir = os.path.join(current_dir, 'my_logs')
         run_id = time.strftime("run_%Y_%m_%d-%H_%M_%S_")
         return os.path.join(root_logdir, run_id)
-    
-    # Add WandbCallback
-    if params['use_wandb']:
-        callback_list.append(WandbCallback())
 
     # Update coefficient_mask callback
     if params['coefficient_threshold'] is not None:
@@ -258,17 +289,7 @@ def get_callbacks(params, savename, x=None, t=None):
         
     if params['use_sindycall']:
         print('generating data for sindycall')
-        params2 = params.copy()
-        params2['tend'] = 200
-        params2['n_ics'] = 1
-
-        # Change and NOT TESTED 
-        data2 = self.data.copy()
-        data2.run_sim(params2['n_ics'], params2['tend'], params2['dt'])
-
-        print('Done..')
-        x = data2.x
-        t = data2.t[:data_test.x.shape[0]]
-        callback_list.append(SindyCall(threshold=params2['sindy_threshold'], update_freq=params2['sindycall_freq'], x=x, t=t))
+        x = data[0]
+        callback_list.append(SindyCall(threshold=params['sindy_threshold'], update_freq=params['sindycall_freq'], x=x))
         
     return callback_list

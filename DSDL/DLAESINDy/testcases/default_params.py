@@ -7,11 +7,9 @@ default_params['data_path'] = os.path.join(ROOTPATH, 'testcases/results/')
 if not os.path.isdir(default_params['data_path']):
     os.makedirs(default_params['data_path'])
 
-default_params['case'] = 'rando'
-default_params['model'] = 'predator_prey'
+default_params['tau'] = None # skip 
 default_params['tend'] = 20
 default_params['dt'] = 0.001
-default_params['tau'] = None # skip 
 
 default_params['system_coefficients'] = None 
 default_params['normalization'] = None 
@@ -39,7 +37,7 @@ default_params['ode_net_widths'] = [1.5, 3]
 
 # sequential thresholding parameters
 default_params['coefficient_threshold'] = 1e-6 ## set to none for turning off RFE
-default_params['threshold_frequency'] = 100
+default_params['threshold_frequency'] = 25
 default_params['coefficient_initialization'] = 'random_normal'
 default_params['fixed_coefficient_mask'] = False
 default_params['fix_coefs'] = False
@@ -73,11 +71,12 @@ default_params['print_frequency'] = 10
 default_params['use_wandb'] = False
 
 # training time cutoffs
-default_params['max_epochs'] = 3000
-default_params['patience'] = 100
+default_params['max_epochs'] = 750
+default_params['patience'] = 50
 default_params['sparse_weighting'] = None
 
 default_params['sindycall_freq'] = 1
 default_params['use_sindycall'] = False
 default_params['sindy_threshold'] = 0.4
 default_params['data_length'] = 1
+default_params['sindy_init_scale'] = 7.0
