@@ -1,5 +1,6 @@
 DATA/
 Pipfile.lock
+wandb/
 
 *.pyc
 *.h5

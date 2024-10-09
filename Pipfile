@@ -31,6 +31,8 @@ kmapper = "*"
 teaspoon = "*"
 umap-learn = "*"
 keras = "*"
+wandb = "*"
+torch = "*"
 
 [dev-packages]
 ipykernel = "*"
