@@ -39,7 +39,7 @@ def model_runner(wandb_params, raw_data):
     params['model'] = 'spy'
     params['case'] = '1hr_3rd_dim64_ld3_sine_x001'
     params['use_wandb'] = True
-    params['dt'] = 900
+    print(params)
     ## slice the data based on a fractional proportion, must remain in sequential order
     raw_data = raw_data[int(params['data_length']*len(raw_data)):]
     data_dict = {
@@ -74,18 +74,19 @@ def wandb_sweep():
             'goal': 'minimize'
         },
         "parameters": {
-            "learning_rate": {'values': [0.1,0.01,0.03,0.001]},
-            "latent_dim": {'values': [2,3,4,5]},
-            "input_dim": {'values': [50,100,200,400]},
+            "learning_rate": {'values': [0.003,0.001,.0001]},
+            "latent_dim": {'values': [2,3,4,6,8]},
+            "input_dim": {'values': [64,128,256]},
             "poly_order": {'values': [2,3,4]},
-            "include_sine": {'values': [True, False]},
-            "loss_weight_layer_l2": {'values': [.0,0.1]},
-            "loss_weight_x0": {'values': [0,0.01,0.1]},
-            "loss_weight_integral": {'values': [0,0.05,0.1]},
+            "include_fourier": {'values': [True, False]},
+            "n_frequencies": {'values': [2,3,4]},
+            "loss_weight_layer_l2": {'values': [.0,0.05]},
+            "loss_weight_x0": {'values': [0.01,0.05]},
+            "loss_weight_integral": {'values': [0.01,0.05,0.1]},
             "loss_weight_sindy_regularization": {'values': [1e-5,1e-3,1e-1]},
-            "loss_weight_rec": {'values': [0.25,0.5,0.75]},
-            "loss_weight_sindy_z": {'values': [0.001,0.01,0.1]},
-            "loss_weight_sindy_x": {'values': [0.001,0.01,0.1]},
+            "loss_weight_rec": {'values': [0.3,0.6,0.9]},
+            "loss_weight_sindy_z": {'values': [0.001,0.0001]},
+            "loss_weight_sindy_x": {'values': [0.001,0.0001]},
             "batch_size": {'values': [32,128]},
             "data_length": {'values': [0,.25,.5,.75]},
             "widths_ratios": {'values': [[0.5,0.25],[0.75,0.5,0.25],[0.8,0.6,0.4,0.2]]},

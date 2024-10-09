@@ -9,24 +9,44 @@ import pysindy as ps
 import keras
 import wandb
 from tensorflow.keras.callbacks import Callback
+from pysindy.feature_library import FourierLibrary, PolynomialLibrary
+from pysindy.feature_library import GeneralizedLibrary
 
     
 class SindyCall(tf.keras.callbacks.Callback):
-    def __init__(self, threshold, update_freq, x):
+    def __init__(self, threshold, update_freq, x, poly_order=2, include_fourier=False, n_frequencies=1):
         super(SindyCall, self).__init__()
         self.threshold = threshold 
         self.update_freq = update_freq
         self.x = x
+        self.poly_order = poly_order
+        self.include_fourier = include_fourier
+        self.n_frequencies = n_frequencies
         
     def on_epoch_end(self, epoch, logs=None):
         if epoch % self.update_freq == 0 and epoch > 1:
+            print()
             print('--- Running Sindy ---')
             x_in = self.x
             z = self.model.encoder(x_in)
             z_latent = z.numpy()
             
-            # sindy
-            library = ps.feature_library.polynomial_library.PolynomialLibrary(degree=self.model.poly_order)
+            # Create PySINDy libraries
+            poly_library = PolynomialLibrary(
+                degree=self.poly_order,
+                include_interaction=True
+            )
+
+            if self.include_fourier:
+                fourier_library = FourierLibrary(
+                    n_frequencies=self.n_frequencies
+                )
+                library = GeneralizedLibrary(
+                    [poly_library, fourier_library]
+                )
+            else:
+                library = poly_library
+
             opt = ps.optimizers.STLSQ(threshold=self.threshold)
             sindy_model = ps.SINDy(feature_library=library, optimizer=opt)
             time = np.linspace(0, self.model.params['dt']*z_latent.shape[0], z_latent.shape[0], endpoint=False)
@@ -49,15 +69,16 @@ class RfeUpdateCallback(tf.keras.callbacks.Callback):
         self.rfe_frequency = rfe_frequency
         
     def on_epoch_end(self, epoch, logs=None):
-        if epoch % self.model.print_frequency == 0:
-            print('--- Sindy Coefficients ---')
-            print(self.model.sindy.coefficients)
+        # if epoch % self.model.print_frequency == 0:
+        #     # print()
+        #     # print('--- Sindy Coefficients ---')
+        #     # print(self.model.sindy.coefficients.numpy())
         if epoch % self.model.rfe_frequency == 0:
             self.model.sindy.update_mask()
         
     def on_train_begin(self, logs=None):
         print('--- Initial Sindy Coefficients ---')
-        print(self.model.sindy.coefficients)
+        print(self.model.sindy.coefficients.numpy())
 
 
 
@@ -84,20 +105,22 @@ class Sindy(layers.Layer):
                  initializer='constant', 
                  actual_coefs=None, 
                  rfe_threshold=None, 
-                 include_sine=False, 
+                 include_fourier=False, 
                  exact_features=False, 
                  fix_coefs=False, 
                  sindy_pert=0.0, 
                  ode_net=False,
                  ode_net_widths=[1.5, 2.0],
                  init_scale=7.0,
+                n_frequencies=1,
                  **kwargs):
         super(Sindy, self).__init__(**kwargs)
         
         self.library_dim = library_dim
         self.state_dim = state_dim
         self.poly_order = poly_order
-        self.include_sine = include_sine
+        self.include_fourier = include_fourier
+        self.n_frequencies = n_frequencies
         self.rfe_threshold = rfe_threshold
         self.exact_features = exact_features
         self.actual_coefs = actual_coefs
@@ -143,7 +166,7 @@ class Sindy(layers.Layer):
                     initializer='ones',
                     trainable=False,
                     name='coefficients_mask'
-)
+                )
 
 
 
@@ -153,6 +176,7 @@ class Sindy(layers.Layer):
         ## ODE NET
         if self.ode_net:
             self.net_model = self.make_theta_network(self.library_dim, self.ode_net_widths)
+
 
     def make_theta_network(self, output_dim, widths):
         out_activation = 'linear'
@@ -175,89 +199,59 @@ class Sindy(layers.Layer):
         if self.ode_net:
             return self.net_model(z)
         else:
-            return self.sindy_library_tf(z, self.state_dim, self.poly_order, self.include_sine, self.exact_features, self.model)
+            return self.sindy_library_tf(z, self.state_dim, self.poly_order, self.include_fourier, self.n_frequencies)
     
     def update_mask(self):
         if self.rfe_threshold is not None:
             print()
             print('--- Running RFE ---')
-            self.coefficients_mask.assign( tf.cast( tf.abs(self.coefficients) > self.rfe_threshold ,tf.float32) )
+            self.coefficients_mask.assign(tf.cast( tf.abs(self.coefficients) > self.rfe_threshold ,tf.float32) )
             self.coefficients.assign(tf.multiply(self.coefficients_mask, self.coefficients))
-            print(self.coefficients_mask)
-            print(self.coefficients)
+            # print(self.coefficients_mask.numpy())
+            # print(self.coefficients.numpy())
 
     
     @tf.function 
-    def sindy_library_tf(self, z, latent_dim, poly_order, include_sine=False, exact_features=False, model='lorenz'):
-        if exact_features:
-            if model == 'lorenz':
-                # Check size (is first dimension batch?)
-                library=[]  
-                library.append(z[:,0])
-                library.append(z[:,1])
-                library.append(z[:,2])
-                library.append(tf.multiply(z[:,0], z[:,1]))
-                library.append(tf.multiply(z[:,0], z[:,2]))
-            elif model == 'predprey':
-                library=[]  
-                library.append(z[:,0])
-                library.append(z[:,1])
-                library.append(tf.multiply(z[:,0], z[:,1]))
-            elif model == 'rossler':
-                library=[]  
-                raise Exception("not implemented")
-        else:
-            # Can make more compact
-            library = [tf.ones(tf.shape(z)[0])]
+    def sindy_library_tf(self, z, latent_dim, poly_order, include_fourier=False,n_frequencies=False):
+        # Can make more compact
+        library = [tf.ones(tf.shape(z)[0])]
+        for i in range(latent_dim):
+            library.append(z[:,i])
+
+        if poly_order > 1:
             for i in range(latent_dim):
-                library.append(z[:,i])
+                for j in range(i,latent_dim):
+                    library.append(tf.multiply(z[:,i], z[:,j]))
 
-            if poly_order > 1:
-                for i in range(latent_dim):
-                    for j in range(i,latent_dim):
-                        library.append(tf.multiply(z[:,i], z[:,j]))
+        if poly_order > 2:
+            for i in range(latent_dim):
+                for j in range(i,latent_dim):
+                    for k in range(j,latent_dim):
+                        library.append(z[:,i]*z[:,j]*z[:,k])
 
-            if poly_order > 2:
-                for i in range(latent_dim):
-                    for j in range(i,latent_dim):
-                        for k in range(j,latent_dim):
-                            library.append(z[:,i]*z[:,j]*z[:,k])
+        if poly_order > 3:
+            for i in range(latent_dim):
+                for j in range(i,latent_dim):
+                    for k in range(j,latent_dim):
+                        for p in range(k,latent_dim):
+                            library.append(z[:,i]*z[:,j]*z[:,k]*z[:,p])
 
-            if poly_order > 3:
-                for i in range(latent_dim):
-                    for j in range(i,latent_dim):
-                        for k in range(j,latent_dim):
-                            for p in range(k,latent_dim):
-                                library.append(z[:,i]*z[:,j]*z[:,k]*z[:,p])
+        if poly_order > 4:
+            for i in range(latent_dim):
+                for j in range(i,latent_dim):
+                    for k in range(j,latent_dim):
+                        for p in range(k,latent_dim):
+                            for q in range(p,latent_dim):
+                                library.append(z[:,i]*z[:,j]*z[:,k]*z[:,p]*z[:,q])
 
-            if poly_order > 4:
-                for i in range(latent_dim):
-                    for j in range(i,latent_dim):
-                        for k in range(j,latent_dim):
-                            for p in range(k,latent_dim):
-                                for q in range(p,latent_dim):
-                                    library.append(z[:,i]*z[:,j]*z[:,k]*z[:,p]*z[:,q])
+        # Add Fourier terms
+        if include_fourier:
+            for i in range(latent_dim):
+                for k in range(1, n_frequencies + 1):
+                    library.append(tf.sin(k * z[:,i]))
+                    library.append(tf.cos(k * z[:,i]))
 
-            if include_sine:
-                for i in range(latent_dim):
-                    library.append(tf.sin(z[:,i]))
-        
-        return tf.stack(library, axis=1)
-    
-    
-@tf.function 
-def sindy_library_lorenz(z, latent_dim, poly_order, include_sine=False, exact_features=False, model='lorenz'):
-    # Can make more compact
-    library = [tf.ones(tf.shape(z)[0])]
-    for i in range(latent_dim):
-        library.append(z[:,i])
-
-    for i in range(latent_dim):
-        for j in range(i,latent_dim):
-            library.append(tf.multiply(z[:,i], z[:,j]))
-
-    return tf.stack(library, axis=1)
-
+        return tf.stack(library, axis=1)    
     #######################################################
 
 # Put in class (?)
@@ -280,7 +274,8 @@ class SindyAutoencoder(tf.keras.Model):
         self.activation = params['activation']
         self.library_dim = params['library_dim']
         self.poly_order = params['poly_order']
-        self.include_sine = params['include_sine']
+        self.include_fourier = params['include_fourier']
+        self.n_frequencies = params['n_frequencies']
         self.initializer = params['coefficient_initialization'] # fix That's sindy's!
         self.epochs = params['max_epochs'] # fix That's sindy's!
         self.rfe_threshold = params['coefficient_threshold']
@@ -309,8 +304,8 @@ class SindyAutoencoder(tf.keras.Model):
             self.decoder._trainable = False
         self.sindy = Sindy(self.library_dim, self.latent_dim, self.poly_order, model=params['model'], 
                            initializer=self.initializer, actual_coefs=self.actual_coefs, rfe_threshold=self.rfe_threshold, 
-                           include_sine=self.include_sine, exact_features=params['exact_features'], fix_coefs=params['fix_coefs'], sindy_pert=self.sindy_pert, 
-                           ode_net=params['ode_net'], ode_net_widths=params['ode_net_widths'], init_scale=params['sindy_init_scale'])
+                           include_fourier=self.include_fourier, exact_features=params['exact_features'], fix_coefs=params['fix_coefs'], sindy_pert=self.sindy_pert, 
+                           ode_net=params['ode_net'], ode_net_widths=params['ode_net_widths'], init_scale=params['sindy_init_scale'], n_frequencies=self.n_frequencies)
 
     
     def make_network(self, input_dim, output_dim, widths, name):

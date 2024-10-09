@@ -61,28 +61,30 @@ class TrainModel:
         params['widths'] = [int(i*input_dim) for i in params['widths_ratios']]
         
         ## Constraining features according to model/case
-        if params['exact_features']:
-            if params['model'] == 'lorenz':
-                params['library_dim'] = 5
-                self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([1, 2, 3, 5, 6]), :]
-            elif params['model'] == 'rossler':
-                params['library_dim'] = 5
-                self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([0, 1, 2, 3, 6]), :]
-            elif params['model'] == 'predprey':
-                params['library_dim'] = 3
-                self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([1, 2, 4]), :]
-        else:
-            params['library_dim'] = library_size(params['latent_dim'], params['poly_order'], params['include_sine'], True)
+        # if params['exact_features']:
+        #     if params['model'] == 'lorenz':
+        #         params['library_dim'] = 5
+        #         self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([1, 2, 3, 5, 6]), :]
+        #     elif params['model'] == 'rossler':
+        #         params['library_dim'] = 5
+        #         self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([0, 1, 2, 3, 6]), :]
+        #     elif params['model'] == 'predprey':
+        #         params['library_dim'] = 3
+        #         self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([1, 2, 4]), :]
+        # else:
+        params['library_dim'] = library_size(
+            params['latent_dim'], params['poly_order'], 
+            params['include_fourier'], params['n_frequencies'],True)
             
         if hasattr(self.data, 'sindy_coefficients') and self.data.sindy_coefficients is not None:
             params['actual_coefficients'] = self.data.sindy_coefficients
         else:
             params['actual_coefficients'] = None
 
-        if 'sparse_weighting' in params:
-            if params['sparse_weighting'] is not None:
-                a, sparse_weights = sindy_library(self.data.z[:100, :], params['poly_order'], include_sparse_weighting=True)
-                params['sparse_weighting'] = sparse_weights
+        # if 'sparse_weighting' in params:
+        #     if params['sparse_weighting'] is not None:
+        #         a, sparse_weights = sindy_library(self.data.z[:100, :], params['poly_order'], include_sparse_weighting=True)
+        #         params['sparse_weighting'] = sparse_weights
         
         return params
 
@@ -147,7 +149,6 @@ class TrainModel:
 
         callback_list = get_callbacks(self.params, train_data, self.savename, x=test_data[1])
         print('Fitting model..')
-        print(f"Ca;;back list: {callback_list}")
         self.history = self.model.fit(
                 x=train_data, y=train_data, 
                 batch_size=self.params['batch_size'],
@@ -290,6 +291,9 @@ def get_callbacks(params, data, savename, x=None, t=None):
     if params['use_sindycall']:
         print('generating data for sindycall')
         x = data[0]
-        callback_list.append(SindyCall(threshold=params['sindy_threshold'], update_freq=params['sindycall_freq'], x=x))
+        callback_list.append(SindyCall(
+            threshold=params['sindy_threshold'], update_freq=params['sindycall_freq'], x=x,
+            poly_order=params['poly_order'], include_fourier=params['include_fourier'],n_frequencies=params['n_frequencies'],
+            ))
         
     return callback_list

@@ -16,7 +16,8 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 params['model'] = 'spy'
 params['case'] = '1hr_3rd_dim64_ld3_sine_x001'
 params['poly_order'] = 2
-params['include_sine'] = False
+params['include_fourier'] = True
+params['n_frequencies'] = 2
 params['fix_coefs'] = False
 params['svd_dim'] = None
 params['latent_dim'] = 2
@@ -44,11 +45,14 @@ params['loss_weight_layer_l1'] = 0.0
 params['widths_ratios'] = [0.75, 0.5, 0.25]
 params['use_wandb'] = False
 params['coefficient_threshold'] = 4 ## set to none for turning off RFE
+params['sindy_threshold'] = 0.2
 params['threshold_frequency'] = 10
 params['use_sindycall'] = True
-params['sindy_threshold'] = 0.2
 params['sindy_init_scale'] = 7.0
+params['sindycall_freq'] = 2
 
+
+print(params)
 
 
 
