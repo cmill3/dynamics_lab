@@ -56,10 +56,7 @@ def model_runner(wandb_params, raw_data):
     trainer = TrainModel(train_data, params)
     trainer.fit() 
 
-def wandb_sweep():
-    raw_data = call_polygon('SPY','2016-01-01','2024-06-01','minute',15)
-    raw_data = raw_data[['c']]
-    raw_data = raw_data.rename(columns={'c':'x'})
+def wandb_sweep(data):
 
 
     # Hyperparameters
@@ -107,11 +104,14 @@ def wandb_sweep():
     def sweep_train():
 
         wandb.init(project="DLAESINDy", config=wandb.config)
-        model_runner(wandb.config, raw_data)
+        model_runner(wandb.config, data)
 
     # Start the sweep
-    wandb.agent(sweep_id, function=sweep_train, count=800) 
+    wandb.agent(sweep_id, function=sweep_train, count=1000) 
 
 
 if __name__ == '__main__':
-    wandb_sweep()
+    raw_data = call_polygon('SPY','2012-01-01','2024-06-01','minute',15)
+    raw_data = raw_data[['c']]
+    raw_data = raw_data.rename(columns={'c':'x'})
+    wandb_sweep(raw_data)
