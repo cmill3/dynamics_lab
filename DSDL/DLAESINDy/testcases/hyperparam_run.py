@@ -36,8 +36,8 @@ def update_params_from_wandb(params, wandb_config):
 
 def model_runner(wandb_params, raw_data):
     params = update_params_from_wandb(default_params, wandb_params)
-    params['model'] = 'spy'
-    params['case'] = '1hr_3rd_dim64_ld3_sine_x001'
+    params['model'] = 'qqq'
+    params['case'] = 'hyp'
     params['use_wandb'] = True
     print(params)
     ## slice the data based on a fractional proportion, must remain in sequential order
