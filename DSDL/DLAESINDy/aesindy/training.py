@@ -157,6 +157,10 @@ class TrainModel:
                 callbacks=callback_list,
                 shuffle=True)
         
+        if self.params['use_wandb']:
+            best_rec_loss = min(self.history.history['val_rec_loss'])
+            wandb.run.summary['best_val_rec_loss'] = best_rec_loss
+            
         if self.params['case'] != 'lockunlock':
             prediction = self.model.predict(test_data)
             ndtest = np.array(test_data)
@@ -224,6 +228,15 @@ class LogCollector(tf.keras.callbacks.Callback):
         logs = logs or {}
         self.logs.append(logs)
 
+class WandbCallback(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        wandb.log({"epoch": epoch})
+
+    def on_train_end(self, logs=None):
+        best_rec_loss = min(self.model.history.history['val_rec_loss'])
+        wandb.run.summary['best_val_rec_loss'] = best_rec_loss
+        wandb.log({"best_val_rec_loss": best_rec_loss})
+
 class CustomTerminateOnNaN(tf.keras.callbacks.Callback):
     def __init__(self, log_collector=None):
         super().__init__()
@@ -236,6 +249,18 @@ class CustomTerminateOnNaN(tf.keras.callbacks.Callback):
             if np.isnan(loss) or np.isinf(loss):
                 print('Batch %d: Invalid loss, terminating training' % (epoch))
                 self.model.stop_training = True
+
+class BestRecLossCallback(tf.keras.callbacks.Callback):
+    def __init__(self):
+        super(BestRecLossCallback, self).__init__()
+        self.best_rec_loss = float('inf')
+
+    def on_epoch_end(self, epoch, logs=None):
+        current_rec_loss = logs.get('val_rec_loss')
+        if current_rec_loss < self.best_rec_loss:
+            self.best_rec_loss = current_rec_loss
+            wandb.run.summary['best_val_rec_loss'] = self.best_rec_loss
+            wandb.log({'current_best_val_rec_loss': self.best_rec_loss})
 
 
 
@@ -252,6 +277,8 @@ def get_callbacks(params, data, savename, x=None, t=None):
 
     if params['use_wandb']:
             callback_list.append(WandbMetricsLogger(log_freq='epoch'))
+            callback_list.append(WandbCallback())
+            callback_list.append(BestRecLossCallback())
     
     ## Tensorboad Saving callback - Good for analyzing results
     def get_run_logdir(current_dir=os.curdir):

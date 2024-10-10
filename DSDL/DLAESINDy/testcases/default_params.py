@@ -71,8 +71,8 @@ default_params['print_frequency'] = 10
 default_params['use_wandb'] = False
 
 # training time cutoffs
-default_params['max_epochs'] = 750
-default_params['patience'] = 50
+default_params['max_epochs'] = 5
+default_params['patience'] = 5
 default_params['sparse_weighting'] = None
 
 default_params['sindycall_freq'] = 10

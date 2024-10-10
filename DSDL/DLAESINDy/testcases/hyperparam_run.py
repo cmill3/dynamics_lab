@@ -70,14 +70,14 @@ def wandb_sweep():
             'exploration_factor': 0.2,
         },
         'metric': {
-            'name': 'val_rec_loss',
+            'name': 'current_best_val_rec_loss',
             'goal': 'minimize'
         },
         "parameters": {
             "learning_rate": {'values': [0.003,0.001,.0001]},
-            "latent_dim": {'values': [2,3,4,6,8]},
+            "latent_dim": {'values': [2]},
             "input_dim": {'values': [64,128,256]},
-            "poly_order": {'values': [2,3,4]},
+            "poly_order": {'values': [2,3]},
             "include_fourier": {'values': [True, False]},
             "n_frequencies": {'values': [2,3,4]},
             "loss_weight_layer_l2": {'values': [.0,0.05]},
@@ -90,13 +90,13 @@ def wandb_sweep():
             "batch_size": {'values': [32,128]},
             "data_length": {'values': [0,.25,.5,.75]},
             "widths_ratios": {'values': [[0.5,0.25],[0.75,0.5,0.25],[0.8,0.6,0.4,0.2]]},
-            "activation": {'values': ['elu','relu','tanh']},
+            "activation": {'values': ['elu','relu']},
             "use_bias": {'values': [True, False]},
             "sindy_threshold": {'values': [0.01,0.1,0.2,0.3]},
             "sindy_init_scale": {'values': [3.0,5.0,7.0,10.0]},
             "threshold_frequency": {'values': [10,20,40]},
             "coefficient_threshold": {'values': [0.5,1,2,3,4]},
-            "sindycall_freq": {'values': [10,20,40]},
+            "sindycall_freq": {'values': [20,50,75]},
         }
     }
 
