@@ -72,7 +72,7 @@ def wandb_sweep(data):
         },
         "parameters": {
             "learning_rate": {'values': [0.003,0.001,.0001]},
-            "latent_dim": {'values': [2]},
+            "latent_dim": {'values': [2,3,4,5,8]},
             "input_dim": {'values': [64,128,256]},
             "poly_order": {'values': [2,3]},
             "include_fourier": {'values': [True, False]},
