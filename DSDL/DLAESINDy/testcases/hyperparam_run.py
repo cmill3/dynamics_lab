@@ -103,6 +103,8 @@ def wandb_sweep(data):
             "threshold_frequency": {'values': [10,20,40]},
             "coefficient_threshold": {'values': [0.5,1,2,3,4]},
             "sindycall_freq": {'values': [20,50,75]},
+            "loss_weight_prediction": {'values': [0.5,1.0,1.5]},
+            "future_steps": {'values': [4,8]},
         }
     }
 
