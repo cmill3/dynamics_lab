@@ -10,6 +10,9 @@ from aesindy.training import TrainModel
 from aesindy.helper_functions import call_polygon
 import wandb
 from wandb.integration.keras import WandbMetricsLogger, WandbModelCheckpoint
+import tensorflow as tf
+import gc
+
 
 def update_params_from_wandb(params, wandb_config):
     """
@@ -55,6 +58,12 @@ def model_runner(wandb_params, raw_data):
     train_data = data_builder.get_data()
     trainer = TrainModel(train_data, params)
     trainer.fit() 
+
+    del trainer.model
+    del trainer
+
+    tf.keras.backend.clear_session()
+    gc.collect()
 
 def wandb_sweep(data):
 

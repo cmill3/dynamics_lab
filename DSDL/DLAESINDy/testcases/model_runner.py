@@ -49,8 +49,8 @@ params['sindy_threshold'] = 0.2
 params['threshold_frequency'] = 10
 params['use_sindycall'] = True
 params['sindy_init_scale'] = 7.0
-params['sindycall_freq'] = 2
-params['future_steps'] = 10  # Number of future steps to predict
+params['sindycall_freq'] = 30
+params['future_steps'] = 8  # Number of future steps to predict
 params['loss_weight_prediction'] = 1.0  # Weight for future prediction loss
 
 print(params)
@@ -71,7 +71,8 @@ data_builder = DatasetConstructor(input_dim=params['input_dim'],
                 interpolate=params['interpolate'],
                 interp_dt=params['interp_dt'],
                 savgol_interp_coefs=params['interp_coefs'],
-                interp_kind=params['interp_kind'])
+                interp_kind=params['interp_kind'],
+                future_steps=params['future_steps'],)
 data_builder.build_solution(data_dict)
 train_data = data_builder.get_data()
 trainer = TrainModel(train_data, params)
