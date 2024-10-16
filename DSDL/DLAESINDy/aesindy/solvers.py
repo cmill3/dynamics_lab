@@ -76,7 +76,6 @@ class DatasetConstructorSynth:
 class DatasetConstructor:
     def __init__(self, 
                 input_dim=128,
-                interpolate=False,
                 interp_dt=0.01,
                 savgol_interp_coefs=[21, 3],
                 interp_kind='cubic'):
@@ -98,7 +97,6 @@ class DatasetConstructor:
         }
     
     def build_solution(self, data):
-        n_realizations = len(data['x'])
         dt = data['dt']
         if 'time' in data.keys():
             times = data['time']
@@ -113,33 +111,15 @@ class DatasetConstructor:
         else:
             dx = [np.gradient(xr, dt) for xr in x]
         
-        new_times = []
-        if self.interpolate:
-            new_dt = self.interp_dt # Include with inputs
-            print('old dt = ', dt)
-            print('new dt = ', new_dt)
-                    
-            # Smoothing and interpolation
-            for i in range(n_realizations):
-                a, b = self.savgol_interp_coefs
-                x[i] = savgol_filter(x[i], a, b)
-                if 'dx' in data.keys():
-                    dx[i] = savgol_filter(dx[i], a, b)
-
-                t = np.arange(times[i][0], times[i][-2], new_dt)
-                f = interpolate.interp1d(times[i], x[i], kind=self.interp_kind)
-                x[i] = f(t) 
-                df = interpolate.interp1d(times[i], dx[i], kind=self.interp_kind)
-                dx[i] = df(t)
-                    
-                times[i] = t
-#             new_times = np.array(new_times)
                     
         n = self.input_dim 
         n_delays = n
         xic = []
         dxic = []
         for j, xr in enumerate(x):
+            print(j)
+            print(len(xr))
+            print(xr)
             n_steps = len(xr) - self.input_dim 
             xj = np.zeros((n_steps, n_delays))
             dxj = np.zeros((n_steps, n_delays))
@@ -162,3 +142,75 @@ class DatasetConstructor:
 #         for i in range(1, n_realizations):
 #             if times[i] - times[i-1] >= dt*2:
 #                 new_time[i] = new_time[i-1] + dt
+        
+class DatasetConstructorMulti:
+    def __init__(self, 
+                 input_dim=128,
+                 interp_dt=0.01,
+                 savgol_interp_coefs=[21, 3],
+                 interp_kind='cubic'):
+
+        self.input_dim = input_dim
+        self.interp_dt = interp_dt 
+        self.savgol_interp_coefs = savgol_interp_coefs
+        self.interp_kind = interp_kind
+
+    def get_data(self):
+        return {
+            't': self.t,
+            'x': self.x,
+            'dx': self.dx,
+            'z': self.z,
+            'dz': self.dz,
+            'sindy_coefficients': self.sindy_coefficients
+        }
+    
+    def build_solution(self, data):
+        n_realizations = len(data['raw_data'][0])  # Assuming 'x' is a list of lists
+        print(f" n_realizations: {n_realizations}")
+        n_variables = len(data['raw_data'])  # Number of time series
+        dt = data['dt']
+        
+        if 'time' in data.keys():
+            times = data['time']
+        elif 'dt' in data.keys():
+            times = np.linspace(0, dt * len(data['raw_data']), len(data['raw_data']), endpoint=False)
+        
+        raw_data = data['raw_data']
+        deriv_data = []
+        for x_var in raw_data:
+            dx = [np.gradient(xr, dt) for xr in x_var]
+            print(f"dx: {dx}")
+            deriv_data.append(dx)
+        
+        n_delays = self.input_dim
+        xic = []
+        dxic = []
+        
+        print(f"n_variables: {n_variables}")
+        for i in range(n_variables):
+            xic_var = []
+            dxic_var = []
+            for j, xr in enumerate(raw_data[i]):
+                print(j)
+                print(xr)
+                n_steps = len(xr) - self.input_dim 
+                xj = np.zeros((n_steps, n_delays))
+                dxj = np.zeros((n_steps, n_delays))
+                for k in range(n_steps):
+                    xj[k, :] = xr[k:n_delays+k]
+                    dxj[k, :] = deriv_data[i][j][k:n_delays+k]
+                xic_var.append(xj)
+                dxic_var.append(dxj)
+            xic.append(np.vstack(xic_var))
+            dxic.append(np.vstack(dxic_var))
+        
+        H = np.hstack(xic)
+        dH = np.hstack(dxic)
+        
+        self.t = times
+        self.x = H.T
+        self.dx = dH.T
+        self.z = np.vstack([np.hstack(x_var) for x_var in raw_data])
+        self.dz = np.vstack([np.hstack(dx_var) for dx_var in dx])
+        self.sindy_coefficients = None  # unused

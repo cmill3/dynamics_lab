@@ -4,7 +4,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
-from aesindy.solvers import DatasetConstructor
+from aesindy.solvers import DatasetConstructorMulti
 from aesindy.training import TrainModel
 from default_params import default_params as params
 from aesindy.helper_functions import call_polygon
@@ -50,24 +50,25 @@ params['threshold_frequency'] = 10
 params['use_sindycall'] = True
 params['sindy_init_scale'] = 7.0
 params['sindycall_freq'] = 2
-
+params['n_time_series'] = 3
+params['variable_weights'] = [.8,.1,.1]
+params['future_steps'] = 10  # Number of future steps to predict
+params['loss_weight_future'] = 1.0  # Weight for future prediction loss
 
 print(params)
 
 
 
 
-raw_data = call_polygon('SPY','2012-01-01','2024-02-01','minute',15)
-raw_data = raw_data[['c']]
+raw_data = call_polygon('SPY','2022-01-01','2024-02-01','minute',15)
+raw_data = raw_data[['c','v','range_vol']]
 raw_data = raw_data.rename(columns={'c':'x'})
 data_dict = {
-    'x':[raw_data['x'].values],
+    'raw_data':[[raw_data['x'].values], [raw_data['v'].values], [raw_data['range_vol'].values]],
     'dt': 900
     }
 
-
-data_builder = DatasetConstructor(input_dim=params['input_dim'],
-                interpolate=params['interpolate'],
+data_builder = DatasetConstructorMulti(input_dim=params['input_dim'],
                 interp_dt=params['interp_dt'],
                 savgol_interp_coefs=params['interp_coefs'],
                 interp_kind=params['interp_kind'])

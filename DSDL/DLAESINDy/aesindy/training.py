@@ -60,18 +60,6 @@ class TrainModel:
         # print(self.data['xorig'].shape)
         params['widths'] = [int(i*input_dim) for i in params['widths_ratios']]
         
-        ## Constraining features according to model/case
-        # if params['exact_features']:
-        #     if params['model'] == 'lorenz':
-        #         params['library_dim'] = 5
-        #         self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([1, 2, 3, 5, 6]), :]
-        #     elif params['model'] == 'rossler':
-        #         params['library_dim'] = 5
-        #         self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([0, 1, 2, 3, 6]), :]
-        #     elif params['model'] == 'predprey':
-        #         params['library_dim'] = 3
-        #         self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([1, 2, 4]), :]
-        # else:
         params['library_dim'] = library_size(
             params['latent_dim'], params['poly_order'], 
             params['include_fourier'], params['n_frequencies'],True)
@@ -81,28 +69,21 @@ class TrainModel:
         else:
             params['actual_coefficients'] = None
 
-        # if 'sparse_weighting' in params:
-        #     if params['sparse_weighting'] is not None:
-        #         a, sparse_weights = sindy_library(self.data.z[:100, :], params['poly_order'], include_sparse_weighting=True)
-        #         params['sparse_weighting'] = sparse_weights
+
         
         return params
 
     def get_data(self):
         # Split into train and test sets
         train_x, test_x = train_test_split(self.data['x'].T, train_size=self.params['train_ratio'], shuffle=False)
-        # val_x, test_x = train_test_split(val_x, train_size=self.params['test_ratio'], shuffle=False)
         train_dx, test_dx = train_test_split(self.data['dx'].T, train_size=self.params['train_ratio'], shuffle=False)
-        # val_dx, test_dx = train_test_split(val_dx, train_size=self.params['test_ratio'], shuffle=False)
         train_data = [train_x, train_dx]  
         test_data = [test_x, test_dx]  
-        # val_data = [val_x, val_dx]
+        
         if self.params['svd_dim'] is not None:
             train_xorig, test_xorig = train_test_split(self.data['xorig'].T, train_size=self.params['train_ratio'], shuffle=False)
-            # val_xorig, test_xorig = train_test_split(val_xorig, train_size=self.params['test_ratio'], shuffle=False)
             train_data = [train_xorig] + train_data
             test_data = [test_xorig] + test_data 
-            # val_data = [val_xorig] + val_data
             
         return train_data, test_data
 

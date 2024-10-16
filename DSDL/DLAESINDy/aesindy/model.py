@@ -11,6 +11,7 @@ import wandb
 from tensorflow.keras.callbacks import Callback
 from pysindy.feature_library import FourierLibrary, PolynomialLibrary
 from pysindy.feature_library import GeneralizedLibrary
+from itertools import combinations_with_replacement
 
     
 class SindyCall(tf.keras.callbacks.Callback):
@@ -252,6 +253,8 @@ class Sindy(layers.Layer):
                     library.append(tf.cos(k * z[:,i]))
 
         return tf.stack(library, axis=1)    
+
+
     #######################################################
 
 # Put in class (?)
@@ -262,6 +265,7 @@ sindy_x_met = tf.keras.metrics.Mean(name="sindy_x_loss")
 integral_met = tf.keras.metrics.Mean(name="integral_loss")
 x0_met = tf.keras.metrics.Mean(name='x0_loss')
 l1_met = tf.keras.metrics.Mean(name='l1_loss')
+prediction_met = tf.keras.metrics.Mean(name='prediction_loss')
 
 @keras.saving.register_keras_serializable(package="SindyAutoencoder")
 class SindyAutoencoder(tf.keras.Model):
@@ -269,7 +273,7 @@ class SindyAutoencoder(tf.keras.Model):
         super(SindyAutoencoder, self).__init__(**kwargs)
         self.params = params
         self.latent_dim = params['latent_dim']
-        self.input_dim = params['input_dim']
+        self.input_dim = params['input_dim'] * params['n_time_series']
         self.widths = params['widths']
         self.activation = params['activation']
         self.library_dim = params['library_dim']
@@ -289,6 +293,7 @@ class SindyAutoencoder(tf.keras.Model):
         self.l1 = params['loss_weight_layer_l1']
         self.sparse_weights = params['sparse_weighting']
         self.trainable_auto = params['trainable_auto']
+        self.variable_weights = tf.constant(value=params['variable_weights'], dtype=tf.float32)
         if params['sparse_weighting'] is not None:
             self.sparse_weights = tf.constant(value=params['sparse_weighting'], dtype=tf.float32)
         if params['fixed_coefficient_mask']:
@@ -333,7 +338,25 @@ class SindyAutoencoder(tf.keras.Model):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+    
 
+    @tf.function
+    def predict_future(self, x_initial, n_steps):
+        z_initial = self.encoder(x_initial)
+        z_future = tf.TensorArray(tf.float32, size=n_steps+1)
+        z_future = z_future.write(0, z_initial)
+        
+        for i in tf.range(n_steps):
+            current_z = z_future.read(i)
+            dz_dt = self.sindy(current_z)
+            z_next = current_z + dz_dt * self.dt
+            z_future = z_future.write(i+1, z_next)
+        
+        z_future = z_future.stack()
+        z_future = tf.transpose(z_future, [1, 0, 2])  # Rearrange to [batch, time, features]
+        x_future = self.decoder(z_future)
+        
+        return x_future
 
     
     @tf.function
@@ -375,7 +398,7 @@ class SindyAutoencoder(tf.keras.Model):
     
 
     @tf.function
-    def get_loss(self, x, dx_dt, x_out, dx_dt_out):
+    def get_loss(self, x, dx_dt, x_out, dx_dt_out, x_future):
         losses = {}
         loss = 0
         if self.params['loss_weight_sindy_z'] > 0.0:
@@ -416,7 +439,13 @@ class SindyAutoencoder(tf.keras.Model):
 
 
         if self.params['loss_weight_sindy_x'] > 0.0:
-            loss_dx = tf.reduce_mean( tf.square(dxh_dt - dx_dt_out) ) 
+            # loss_dx = tf.reduce_mean( tf.square(dxh_dt - dx_dt_out) ) 
+            loss_dx = tf.reduce_mean(
+                tf.multiply(
+                    self.variable_weights,
+                    tf.reduce_mean(tf.square(dxh_dt - dx_dt_out), axis=0)
+                )
+            )
             loss += self.params['loss_weight_sindy_x'] * loss_dx
             losses['sindy_x'] = loss_dx
 
@@ -431,6 +460,19 @@ class SindyAutoencoder(tf.keras.Model):
             losses['x0'] = loss_x0
 
         loss_rec = tf.reduce_mean( tf.square(xh - x_out) )
+        # loss_rec = tf.reduce_mean(
+        #     tf.multiply(
+        #         self.variable_weights,
+        #         tf.reduce_mean(tf.square(xh - x_out), axis=0)
+        #     )
+        # )
+
+        # Add future prediction loss
+        x_pred_future = self.predict_future(x[:, 0], x_future.shape[1])
+        loss_future = tf.reduce_mean(tf.square(x_pred_future - x_future))
+        loss += self.params['loss_weight_prediction'] * loss_future
+        losses['prediction'] = loss_future
+        
         if self.sparse_weights is not None:
             loss_l1 = tf.reduce_mean(tf.abs(tf.multiply(self.sparse_weights, self.sindy.coefficients) ) )
         else:
@@ -461,11 +503,13 @@ class SindyAutoencoder(tf.keras.Model):
             x0_met.update_state(losses['x0'])
         if self.params['loss_weight_sindy_regularization'] > 0:
             l1_met.update_state(losses['l1'])
+        if self.params['loss_weight_prediction'] > 0:
+            prediction_met.update_state(losses['prediction'])
 
     # Check if needed
     @property
     def metrics(self):
-        m = [total_met, rec_met]
+        m = [total_met, rec_met, prediction_met]
         if self.params['loss_weight_sindy_z'] > 0.0:
             m.append(sindy_z_met)
         if self.params['loss_weight_sindy_x'] > 0.0:
@@ -476,5 +520,7 @@ class SindyAutoencoder(tf.keras.Model):
             m.append(x0_met)
         if self.params['loss_weight_sindy_regularization'] > 0.0:
             m.append(l1_met)
+        if self.params['loss_weight_prediction'] > 0.0:
+            m.append(prediction_met)
         return m 
 
