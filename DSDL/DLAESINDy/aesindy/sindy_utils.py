@@ -4,12 +4,12 @@ from scipy.integrate import odeint
 import pdb
 
 
-def library_size(n, poly_order, use_sine=False, include_constant=True):
+def library_size(n, poly_order, include_fourier=False, n_frequencies=2, include_constant=True):
     l = 0
     for k in range(poly_order+1):
         l += int(binom(n+k-1,k))
-    if use_sine:
-        l += n
+    if include_fourier:
+        l += 2*n_frequencies*n
     if not include_constant:
         l -= 1
     return l

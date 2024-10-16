@@ -79,13 +79,15 @@ class DatasetConstructor:
                 interpolate=False,
                 interp_dt=0.01,
                 savgol_interp_coefs=[21, 3],
-                interp_kind='cubic'):
+                interp_kind='cubic',
+                future_steps=10):
 
         self.input_dim = input_dim
         self.interpolate = interpolate 
         self.interp_dt = interp_dt 
         self.savgol_interp_coefs = savgol_interp_coefs
         self.interp_kind = interp_kind
+        self.future_steps = future_steps
 
     def get_data(self):
         return {
@@ -136,11 +138,13 @@ class DatasetConstructor:
 #             new_times = np.array(new_times)
                     
         n = self.input_dim 
+        if self.future_steps > 0:
+            n += self.future_steps
         n_delays = n
         xic = []
         dxic = []
         for j, xr in enumerate(x):
-            n_steps = len(xr) - self.input_dim 
+            n_steps = len(xr) - n
             xj = np.zeros((n_steps, n_delays))
             dxj = np.zeros((n_steps, n_delays))
             for k in range(n_steps):

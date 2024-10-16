@@ -82,7 +82,6 @@ def get_names(cases, path):
 def get_cases(path, filter_case=None, print_cases=True):
     print('Cases:')
     directory = listdir(path)
-    print(directory)
     case_list = []
     for name in directory:
         if '.pkl' not in name:
@@ -117,7 +116,7 @@ def get_display_params(params, display_params=None):
 def load_results(name, path='./results/'):
 
     try:
-        params = pickle.load(open(path+name+'_params.pkl', 'rb'))
+        params = pickle.load(open(f"{path}{name}/model_params.pkl", 'rb'))
     except:
         print('params file doesnt not exist')
         params = None
@@ -137,7 +136,7 @@ def load_results(name, path='./results/'):
         
     
     try:
-        results = pickle.load(open(path+name+'_results.pkl', 'rb')) 
+        results = pickle.load(open(f"{path}{name}/model_results.pkl", 'rb')) 
     except:
         results = None
         print('no results file for ', name)
@@ -199,7 +198,7 @@ def read_results(name_list,
         end_time_idx = int(end_time_plot/params['dt'])
 
         ## temp solution
-        raw_data = call_polygon('SPY','2017-01-01','2024-07-01','minute',1)
+        raw_data = call_polygon('SPY','2013-01-01','2024-08-01','day',1)
         raw_data = raw_data[['c']]
         raw_data = raw_data.rename(columns={'c':'x'})
         data_dict = {

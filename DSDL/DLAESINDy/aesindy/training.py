@@ -12,7 +12,9 @@ import tensorflow as tf
 import pdb
 from sklearn.preprocessing import StandardScaler
 from .sindy_utils import library_size, sindy_library
-from .model import SindyAutoencoder, PreSVDSindyAutoencoder, RfeUpdateCallback, SindyCall
+from .model import SindyAutoencoder, RfeUpdateCallback, SindyCall
+import wandb
+from wandb.integration.keras import WandbMetricsLogger
 
 
 class TrainModel:
@@ -59,28 +61,30 @@ class TrainModel:
         params['widths'] = [int(i*input_dim) for i in params['widths_ratios']]
         
         ## Constraining features according to model/case
-        if params['exact_features']:
-            if params['model'] == 'lorenz':
-                params['library_dim'] = 5
-                self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([1, 2, 3, 5, 6]), :]
-            elif params['model'] == 'rossler':
-                params['library_dim'] = 5
-                self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([0, 1, 2, 3, 6]), :]
-            elif params['model'] == 'predprey':
-                params['library_dim'] = 3
-                self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([1, 2, 4]), :]
-        else:
-            params['library_dim'] = library_size(params['latent_dim'], params['poly_order'], params['include_sine'], True)
+        # if params['exact_features']:
+        #     if params['model'] == 'lorenz':
+        #         params['library_dim'] = 5
+        #         self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([1, 2, 3, 5, 6]), :]
+        #     elif params['model'] == 'rossler':
+        #         params['library_dim'] = 5
+        #         self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([0, 1, 2, 3, 6]), :]
+        #     elif params['model'] == 'predprey':
+        #         params['library_dim'] = 3
+        #         self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([1, 2, 4]), :]
+        # else:
+        params['library_dim'] = library_size(
+            params['latent_dim'], params['poly_order'], 
+            params['include_fourier'], params['n_frequencies'],True)
             
         if hasattr(self.data, 'sindy_coefficients') and self.data.sindy_coefficients is not None:
             params['actual_coefficients'] = self.data.sindy_coefficients
         else:
             params['actual_coefficients'] = None
 
-        if 'sparse_weighting' in params:
-            if params['sparse_weighting'] is not None:
-                a, sparse_weights = sindy_library(self.data.z[:100, :], params['poly_order'], include_sparse_weighting=True)
-                params['sparse_weighting'] = sparse_weights
+        # if 'sparse_weighting' in params:
+        #     if params['sparse_weighting'] is not None:
+        #         a, sparse_weights = sindy_library(self.data.z[:100, :], params['poly_order'], include_sparse_weighting=True)
+        #         params['sparse_weighting'] = sparse_weights
         
         return params
 
@@ -128,8 +132,6 @@ class TrainModel:
     def get_model(self):
         if self.params['svd_dim'] is None:
             model = SindyAutoencoder(self.params)
-        else:
-            model = PreSVDSindyAutoencoder(self.params)
         return model
 
     def fit(self):
@@ -145,10 +147,8 @@ class TrainModel:
         optimizer = tf.keras.optimizers.Adam(learning_rate=self.params['learning_rate'])
         self.model.compile(optimizer=optimizer, loss='mse')
 
-        callback_list = get_callbacks(self.params, self.savename, x=test_data[1])
+        callback_list = get_callbacks(self.params, train_data, self.savename, x=test_data[1])
         print('Fitting model..')
-        for x in train_data:
-            print(x.shape)
         self.history = self.model.fit(
                 x=train_data, y=train_data, 
                 batch_size=self.params['batch_size'],
@@ -157,15 +157,14 @@ class TrainModel:
                 callbacks=callback_list,
                 shuffle=True)
         
+        if self.params['use_wandb']:
+            best_rec_loss = min(self.history.history['val_rec_loss'])
+            wandb.run.summary['best_val_rec_loss'] = best_rec_loss
+            
         if self.params['case'] != 'lockunlock':
             prediction = self.model.predict(test_data)
-            print(" tesrt data")
             ndtest = np.array(test_data)
-            print(ndtest.shape)
-            print("Prediction")
-            print(prediction.shape)
             self.save_results(self.model)
-            
         else: # Used to make SINDy coefficients trainable 
             self.params['fix_coefs'] = False
             self.model_unlock = self.get_model()
@@ -180,8 +179,6 @@ class TrainModel:
                     callbacks=callback_list,
                     shuffle=True)
             prediction = self.model_unlock.predict(test_data)
-            print("Prediction")
-            print(prediction)
             self.save_results(self.model_unlock)
         return prediction
         
@@ -216,9 +213,71 @@ class TrainModel:
 
 #########################################################
 #########################################################
+        
+class LogCollector(tf.keras.callbacks.Callback):
+    def __init__(self):
+        super().__init__()
+        self.logs = []
 
-def get_callbacks(params, savename, x=None, t=None):
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        self.logs.append(logs)
+
+    def on_batch_end(self,batch, logs=None):
+        logs = logs or {}
+        self.logs.append(logs)
+
+class WandbCallback(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        wandb.log({"epoch": epoch})
+
+    def on_train_end(self, logs=None):
+        best_rec_loss = min(self.model.history.history['val_rec_loss'])
+        wandb.run.summary['best_val_rec_loss'] = best_rec_loss
+        wandb.log({"best_val_rec_loss": best_rec_loss})
+
+class CustomTerminateOnNaN(tf.keras.callbacks.Callback):
+    def __init__(self, log_collector=None):
+        super().__init__()
+        self.log_collector = log_collector
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        loss = logs.get('rec_loss')
+        if loss is not None:
+            if np.isnan(loss) or np.isinf(loss):
+                print('Batch %d: Invalid loss, terminating training' % (epoch))
+                self.model.stop_training = True
+
+class BestRecLossCallback(tf.keras.callbacks.Callback):
+    def __init__(self):
+        super(BestRecLossCallback, self).__init__()
+        self.best_rec_loss = float('inf')
+
+    def on_epoch_end(self, epoch, logs=None):
+        current_rec_loss = logs.get('val_rec_loss')
+        if current_rec_loss < self.best_rec_loss:
+            self.best_rec_loss = current_rec_loss
+            wandb.run.summary['best_val_rec_loss'] = self.best_rec_loss
+            wandb.log({'current_best_val_rec_loss': self.best_rec_loss})
+
+
+
+def get_callbacks(params, data, savename, x=None, t=None):
     callback_list = []
+
+    callback_list.append(tf.keras.callbacks.TerminateOnNaN())
+
+    log_collector = LogCollector()
+    callback_list.append(log_collector)
+    callback_list.append(CustomTerminateOnNaN(log_collector))
+    # # Terminate on NaN
+    # callback_list.append(CustomTerminateOnNaN())
+
+    if params['use_wandb']:
+            callback_list.append(WandbMetricsLogger(log_freq='epoch'))
+            callback_list.append(WandbCallback())
+            callback_list.append(BestRecLossCallback())
     
     ## Tensorboad Saving callback - Good for analyzing results
     def get_run_logdir(current_dir=os.curdir):
@@ -232,7 +291,7 @@ def get_callbacks(params, savename, x=None, t=None):
     
     # Early stopping in when training stops improving
     if params['patience'] is not None:
-        callback_list.append(tf.keras.callbacks.EarlyStopping(patience=params['patience'], monitor='val_rec_loss', mode='min', restore_best_weights=True))
+        callback_list.append(tf.keras.callbacks.EarlyStopping(patience=params['patience'], monitor='val_prediction_loss', mode='min', restore_best_weights=True))
 
 
     # Learning rate scheduler - Decrease learning rate exponentially (include in callback if needed)
@@ -257,17 +316,10 @@ def get_callbacks(params, savename, x=None, t=None):
         
     if params['use_sindycall']:
         print('generating data for sindycall')
-        params2 = params.copy()
-        params2['tend'] = 200
-        params2['n_ics'] = 1
-
-        # Change and NOT TESTED 
-        data2 = self.data.copy()
-        data2.run_sim(params2['n_ics'], params2['tend'], params2['dt'])
-
-        print('Done..')
-        x = data2.x
-        t = data2.t[:data_test.x.shape[0]]
-        callback_list.append(SindyCall(threshold=params2['sindy_threshold'], update_freq=params2['sindycall_freq'], x=x, t=t))
+        x = data[0]
+        callback_list.append(SindyCall(
+            threshold=params['sindy_threshold'], update_freq=params['sindycall_freq'], x=x,
+            poly_order=params['poly_order'], include_fourier=params['include_fourier'],n_frequencies=params['n_frequencies'],
+            input_dim=params['input_dim'],))
         
     return callback_list
