@@ -50,14 +50,15 @@ params['threshold_frequency'] = 10
 params['use_sindycall'] = True
 params['sindy_init_scale'] = 7.0
 params['sindycall_freq'] = 2
-
+params['future_steps'] = 10  # Number of future steps to predict
+params['loss_weight_prediction'] = 1.0  # Weight for future prediction loss
 
 print(params)
 
 
 
 
-raw_data = call_polygon('SPY','2012-01-01','2024-02-01','minute',15)
+raw_data = call_polygon('SPY','2023-01-01','2024-02-01','minute',15)
 raw_data = raw_data[['c']]
 raw_data = raw_data.rename(columns={'c':'x'})
 data_dict = {
