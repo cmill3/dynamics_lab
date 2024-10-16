@@ -39,7 +39,7 @@ def update_params_from_wandb(params, wandb_config):
 
 def model_runner(wandb_params, raw_data):
     params = update_params_from_wandb(default_params, wandb_params)
-    params['model'] = 'qqq'
+    params['model'] = 'spy'
     params['case'] = 'hyp'
     params['use_wandb'] = True
     print(params)
