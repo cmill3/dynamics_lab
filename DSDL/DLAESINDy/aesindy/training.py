@@ -232,9 +232,9 @@ class WandbCallback(tf.keras.callbacks.Callback):
         wandb.log({"epoch": epoch})
 
     def on_train_end(self, logs=None):
-        best_rec_loss = min(self.model.history.history['val_rec_loss'])
-        wandb.run.summary['best_val_rec_loss'] = best_rec_loss
-        wandb.log({"best_val_rec_loss": best_rec_loss})
+        best_rec_loss = min(self.model.history.history['val_prediction_loss'])
+        wandb.run.summary['best_val_prediction_loss'] = best_rec_loss
+        wandb.log({"best_val_prediction_loss": best_rec_loss})
 
 class CustomTerminateOnNaN(tf.keras.callbacks.Callback):
     def __init__(self, log_collector=None):
@@ -255,11 +255,11 @@ class BestRecLossCallback(tf.keras.callbacks.Callback):
         self.best_rec_loss = float('inf')
 
     def on_epoch_end(self, epoch, logs=None):
-        current_rec_loss = logs.get('val_rec_loss')
+        current_rec_loss = logs.get('val_prediction_loss')
         if current_rec_loss < self.best_rec_loss:
             self.best_rec_loss = current_rec_loss
-            wandb.run.summary['best_val_rec_loss'] = self.best_rec_loss
-            wandb.log({'current_best_val_rec_loss': self.best_rec_loss})
+            wandb.run.summary['best_val_prediction_loss'] = self.best_rec_loss
+            wandb.log({'current_best_val_prediction_loss': self.best_rec_loss})
 
 
 

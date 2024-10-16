@@ -53,7 +53,8 @@ def model_runner(wandb_params, raw_data):
                     interpolate=params['interpolate'],
                     interp_dt=params['interp_dt'],
                     savgol_interp_coefs=params['interp_coefs'],
-                    interp_kind=params['interp_kind'])
+                    interp_kind=params['interp_kind'],
+                    future_steps=params['future_steps'])
     data_builder.build_solution(data_dict)
     train_data = data_builder.get_data()
     trainer = TrainModel(train_data, params)
@@ -76,7 +77,7 @@ def wandb_sweep(data):
             'exploration_factor': 0.2,
         },
         'metric': {
-            'name': 'current_best_val_rec_loss',
+            'name': 'current_best_val_prediction_loss',
             'goal': 'minimize'
         },
         "parameters": {

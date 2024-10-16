@@ -402,12 +402,6 @@ class SindyAutoencoder(tf.keras.Model):
 
     @tf.function
     def get_loss(self, x, dx_dt, x_out, dx_dt_out, x_future):
-        print('--- Inside get_loss ---')
-        print('x shape:', x.shape)
-        print('dx_dt shape:', dx_dt.shape)
-        print('x_out shape:', x_out.shape)
-        print('dx_dt_out shape:', dx_dt_out.shape)
-        print("x_future shape:", tf.shape(x_future))
         losses = {}
         loss = 0
         if self.params['loss_weight_sindy_z'] > 0.0:
