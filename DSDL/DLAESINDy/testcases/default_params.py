@@ -81,4 +81,5 @@ default_params['sindy_threshold'] = 0.4
 default_params['data_length'] = 1
 default_params['sindy_init_scale'] = 7.0
 default_params['n_frequencies'] = 2
-
+default_params['future_steps'] = 8  # Number of future steps to predict
+default_params['loss_weight_prediction'] = 1.0  # Weight for future prediction loss

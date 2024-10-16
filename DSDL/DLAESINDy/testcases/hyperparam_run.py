@@ -10,6 +10,9 @@ from aesindy.training import TrainModel
 from aesindy.helper_functions import call_polygon
 import wandb
 from wandb.integration.keras import WandbMetricsLogger, WandbModelCheckpoint
+import tensorflow as tf
+import gc
+
 
 def update_params_from_wandb(params, wandb_config):
     """
@@ -50,11 +53,18 @@ def model_runner(wandb_params, raw_data):
                     interpolate=params['interpolate'],
                     interp_dt=params['interp_dt'],
                     savgol_interp_coefs=params['interp_coefs'],
-                    interp_kind=params['interp_kind'])
+                    interp_kind=params['interp_kind'],
+                    future_steps=params['future_steps'])
     data_builder.build_solution(data_dict)
     train_data = data_builder.get_data()
     trainer = TrainModel(train_data, params)
     trainer.fit() 
+
+    del trainer.model
+    del trainer
+
+    tf.keras.backend.clear_session()
+    gc.collect()
 
 def wandb_sweep(data):
 
@@ -67,7 +77,7 @@ def wandb_sweep(data):
             'exploration_factor': 0.2,
         },
         'metric': {
-            'name': 'current_best_val_rec_loss',
+            'name': 'current_best_val_prediction_loss',
             'goal': 'minimize'
         },
         "parameters": {
@@ -94,6 +104,8 @@ def wandb_sweep(data):
             "threshold_frequency": {'values': [10,20,40]},
             "coefficient_threshold": {'values': [0.5,1,2,3,4]},
             "sindycall_freq": {'values': [20,50,75]},
+            "loss_weight_prediction": {'values': [0.5,1.0,1.5]},
+            "future_steps": {'values': [4,8]},
         }
     }
 

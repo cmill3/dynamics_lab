@@ -146,7 +146,6 @@ class TrainModel:
             prediction = self.model.predict(test_data)
             ndtest = np.array(test_data)
             self.save_results(self.model)
-            
         else: # Used to make SINDy coefficients trainable 
             self.params['fix_coefs'] = False
             self.model_unlock = self.get_model()
@@ -214,9 +213,9 @@ class WandbCallback(tf.keras.callbacks.Callback):
         wandb.log({"epoch": epoch})
 
     def on_train_end(self, logs=None):
-        best_rec_loss = min(self.model.history.history['val_rec_loss'])
-        wandb.run.summary['best_val_rec_loss'] = best_rec_loss
-        wandb.log({"best_val_rec_loss": best_rec_loss})
+        best_rec_loss = min(self.model.history.history['val_prediction_loss'])
+        wandb.run.summary['best_val_prediction_loss'] = best_rec_loss
+        wandb.log({"best_val_prediction_loss": best_rec_loss})
 
 class CustomTerminateOnNaN(tf.keras.callbacks.Callback):
     def __init__(self, log_collector=None):
@@ -237,11 +236,11 @@ class BestRecLossCallback(tf.keras.callbacks.Callback):
         self.best_rec_loss = float('inf')
 
     def on_epoch_end(self, epoch, logs=None):
-        current_rec_loss = logs.get('val_rec_loss')
+        current_rec_loss = logs.get('val_prediction_loss')
         if current_rec_loss < self.best_rec_loss:
             self.best_rec_loss = current_rec_loss
-            wandb.run.summary['best_val_rec_loss'] = self.best_rec_loss
-            wandb.log({'current_best_val_rec_loss': self.best_rec_loss})
+            wandb.run.summary['best_val_prediction_loss'] = self.best_rec_loss
+            wandb.log({'current_best_val_prediction_loss': self.best_rec_loss})
 
 
 
@@ -273,7 +272,7 @@ def get_callbacks(params, data, savename, x=None, t=None):
     
     # Early stopping in when training stops improving
     if params['patience'] is not None:
-        callback_list.append(tf.keras.callbacks.EarlyStopping(patience=params['patience'], monitor='val_rec_loss', mode='min', restore_best_weights=True))
+        callback_list.append(tf.keras.callbacks.EarlyStopping(patience=params['patience'], monitor='val_prediction_loss', mode='min', restore_best_weights=True))
 
 
     # Learning rate scheduler - Decrease learning rate exponentially (include in callback if needed)
@@ -302,6 +301,6 @@ def get_callbacks(params, data, savename, x=None, t=None):
         callback_list.append(SindyCall(
             threshold=params['sindy_threshold'], update_freq=params['sindycall_freq'], x=x,
             poly_order=params['poly_order'], include_fourier=params['include_fourier'],n_frequencies=params['n_frequencies'],
-            ))
+            input_dim=params['input_dim'],))
         
     return callback_list

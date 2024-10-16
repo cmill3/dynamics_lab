@@ -15,7 +15,7 @@ from itertools import combinations_with_replacement
 
     
 class SindyCall(tf.keras.callbacks.Callback):
-    def __init__(self, threshold, update_freq, x, poly_order=2, include_fourier=False, n_frequencies=1):
+    def __init__(self, threshold, update_freq, x, poly_order=2, include_fourier=False, n_frequencies=1, input_dim=128):
         super(SindyCall, self).__init__()
         self.threshold = threshold 
         self.update_freq = update_freq
@@ -23,12 +23,13 @@ class SindyCall(tf.keras.callbacks.Callback):
         self.poly_order = poly_order
         self.include_fourier = include_fourier
         self.n_frequencies = n_frequencies
+        self.input_dim = input_dim
         
     def on_epoch_end(self, epoch, logs=None):
         if epoch % self.update_freq == 0 and epoch > 1:
             print()
             print('--- Running Sindy ---')
-            x_in = self.x
+            x_in = self.x[:, :self.input_dim]
             z = self.model.encoder(x_in)
             z_latent = z.numpy()
             
@@ -327,7 +328,7 @@ class SindyAutoencoder(tf.keras.Model):
         return model
                 
     def call(self, datain):
-        x = datain[0]
+        x = datain[0][:, :self.params['input_dim']]
         return self.decoder(self.encoder(x))
     
     def get_config(self):
@@ -339,6 +340,26 @@ class SindyAutoencoder(tf.keras.Model):
     def from_config(cls, config):
         return cls(**config)
     
+    @tf.function
+    def predict_future(self, x_initial, n_steps):
+        z_current = self.encoder(x_initial)
+        x_future = tf.TensorArray(tf.float32, size=n_steps+1)
+        x_future = x_future.write(0, x_initial)
+        
+        for i in tf.range(n_steps):
+            dz_dt = self.sindy(z_current)
+            z_current = z_current + dz_dt * self.dt
+            x_current = self.decoder(z_current)
+            x_future = x_future.write(i+1, x_current)
+        
+        x_future = x_future.stack()
+        x_future = tf.transpose(x_future, [1, 0, 2])  # Rearrange to [batch, time, features]
+        x_future = x_future[:, 1:, -1:] # Remove the last feature, which is the future feature
+         # Ensure the output shape matches x_future
+        if x_future.shape.ndims == 3 and x_future.shape[-1] == 1:
+            x_future = tf.squeeze(x_future, axis=-1)
+        return x_future
+
 
     @tf.function
     def predict_future(self, x_initial, n_steps):
@@ -362,13 +383,15 @@ class SindyAutoencoder(tf.keras.Model):
     @tf.function
     def train_step(self, data):
         inputs, outputs = data
-        x = inputs[0]
-        dx_dt = tf.expand_dims(inputs[1], 2)
-        x_out = outputs[0]
-        dx_dt_out = tf.expand_dims(outputs[1], 2)
+        x = inputs[0][:, :self.params['input_dim']]
+        x_future = inputs[0][:, self.params['input_dim']:]
+        dx_dt = tf.expand_dims(inputs[1][:,:self.params['input_dim']], 2)
+        x_out = outputs[0][:, :self.params['input_dim']]
+        dx_dt_out =  tf.expand_dims(outputs[1][:,:self.params['input_dim']], 2)
+
 
         with tf.GradientTape() as tape:
-            loss, losses = self.get_loss(x, dx_dt, x_out, dx_dt_out)
+            loss, losses = self.get_loss(x, dx_dt, x_out, dx_dt_out, x_future)
             
         trainable_vars = self.trainable_variables
         gradients = tape.gradient(loss, trainable_vars)
@@ -383,12 +406,13 @@ class SindyAutoencoder(tf.keras.Model):
     @tf.function
     def test_step(self, data):
         inputs, outputs = data
-        x = inputs[0]
-        dx_dt = tf.expand_dims(inputs[1], 2)
-        x_out = outputs[0]
-        dx_dt_out = tf.expand_dims(outputs[1], 2)
+        x = inputs[0][:, :self.params['input_dim']]
+        x_future = inputs[0][:, self.params['input_dim']:]
+        dx_dt = tf.expand_dims(inputs[1][:,:self.params['input_dim']], 2)
+        x_out = outputs[0][:, :self.params['input_dim']]
+        dx_dt_out =  tf.expand_dims(outputs[1][:,:self.params['input_dim']], 2)
         
-        loss, losses = self.get_loss(x, dx_dt, x_out, dx_dt_out)
+        loss, losses = self.get_loss(x, dx_dt, x_out, dx_dt_out, x_future)
         
         ## Keep track and update losses
         self.update_losses(loss, losses)
@@ -458,6 +482,13 @@ class SindyAutoencoder(tf.keras.Model):
             loss_x0 = tf.reduce_mean( tf.square(z[:, 0] - x[:, 0]) )
             loss += self.params['loss_weight_x0'] * loss_x0
             losses['x0'] = loss_x0
+
+        if self.params['loss_weight_prediction'] > 0.0:
+            future_steps = self.params['future_steps']
+            prediction = self.predict_future(x, future_steps)
+            loss_pred = tf.reduce_mean( tf.square(x_future - prediction) )
+            loss += self.params['loss_weight_prediction'] * loss_pred
+            losses['prediction'] = loss_pred
 
         loss_rec = tf.reduce_mean( tf.square(xh - x_out) )
         # loss_rec = tf.reduce_mean(

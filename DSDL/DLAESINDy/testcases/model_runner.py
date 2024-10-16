@@ -71,7 +71,8 @@ data_dict = {
 data_builder = DatasetConstructorMulti(input_dim=params['input_dim'],
                 interp_dt=params['interp_dt'],
                 savgol_interp_coefs=params['interp_coefs'],
-                interp_kind=params['interp_kind'])
+                interp_kind=params['interp_kind'],
+                future_steps=params['future_steps'],)
 data_builder.build_solution(data_dict)
 train_data = data_builder.get_data()
 trainer = TrainModel(train_data, params)
