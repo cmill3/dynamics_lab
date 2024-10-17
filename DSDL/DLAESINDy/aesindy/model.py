@@ -193,7 +193,8 @@ class Sindy(layers.Layer):
         return model
     
     def call(self, z):
-        dz_dt = tf.matmul(self.theta(z), self.coefficients)
+        theta = self.theta(z)
+        dz_dt = tf.einsum('ijk,kl->ijl', theta, self.coefficients)
         return dz_dt
     
     @tf.function
@@ -213,47 +214,72 @@ class Sindy(layers.Layer):
             # print(self.coefficients.numpy())
 
     
+    # @tf.function 
+    # def sindy_library_tf(self, z, latent_dim, poly_order, include_fourier=False,n_frequencies=False):
+    #     # Can make more compact
+    #     library = [tf.ones(tf.shape(z)[0])]
+    #     for i in range(latent_dim):
+    #         library.append(z[:, :, i:i+1])
+
+    #     if poly_order > 1:
+    #         for i in range(latent_dim):
+    #             for j in range(i,latent_dim):
+    #                 library.append(tf.multiply(z[:,i], z[:,j]))
+
+    #     if poly_order > 2:
+    #         for i in range(latent_dim):
+    #             for j in range(i,latent_dim):
+    #                 for k in range(j,latent_dim):
+    #                     library.append(z[:,i]*z[:,j]*z[:,k])
+
+    #     if poly_order > 3:
+    #         for i in range(latent_dim):
+    #             for j in range(i,latent_dim):
+    #                 for k in range(j,latent_dim):
+    #                     for p in range(k,latent_dim):
+    #                         library.append(z[:,i]*z[:,j]*z[:,k]*z[:,p])
+
+    #     if poly_order > 4:
+    #         for i in range(latent_dim):
+    #             for j in range(i,latent_dim):
+    #                 for k in range(j,latent_dim):
+    #                     for p in range(k,latent_dim):
+    #                         for q in range(p,latent_dim):
+    #                             library.append(z[:,i]*z[:,j]*z[:,k]*z[:,p]*z[:,q])
+
+    #     # Add Fourier terms
+    #     if include_fourier:
+    #         for i in range(latent_dim):
+    #             for k in range(1, n_frequencies + 1):
+    #                 library.append(tf.sin(k * z[:,i]))
+    #                 library.append(tf.cos(k * z[:,i]))
+
+    #     return tf.stack(library, axis=1)    
+            
     @tf.function 
-    def sindy_library_tf(self, z, latent_dim, poly_order, include_fourier=False,n_frequencies=False):
-        # Can make more compact
-        library = [tf.ones(tf.shape(z)[0])]
+    def sindy_library_tf(self, z, latent_dim, poly_order, include_fourier=False, n_frequencies=1):
+        # z shape is (batch_size, n_variables, latent_dim)
+        z_shape = tf.shape(z)
+        batch_size = z_shape[0]
+        n_variables = z_shape[1]
+
+        library = [tf.ones((batch_size, n_variables, 1))]
+        
         for i in range(latent_dim):
-            library.append(z[:,i])
+            library.append(z[:, :, i:i+1])
 
         if poly_order > 1:
             for i in range(latent_dim):
-                for j in range(i,latent_dim):
-                    library.append(tf.multiply(z[:,i], z[:,j]))
+                for j in range(i, latent_dim):
+                    library.append(z[:, :, i:i+1] * z[:, :, j:j+1])
 
-        if poly_order > 2:
-            for i in range(latent_dim):
-                for j in range(i,latent_dim):
-                    for k in range(j,latent_dim):
-                        library.append(z[:,i]*z[:,j]*z[:,k])
-
-        if poly_order > 3:
-            for i in range(latent_dim):
-                for j in range(i,latent_dim):
-                    for k in range(j,latent_dim):
-                        for p in range(k,latent_dim):
-                            library.append(z[:,i]*z[:,j]*z[:,k]*z[:,p])
-
-        if poly_order > 4:
-            for i in range(latent_dim):
-                for j in range(i,latent_dim):
-                    for k in range(j,latent_dim):
-                        for p in range(k,latent_dim):
-                            for q in range(p,latent_dim):
-                                library.append(z[:,i]*z[:,j]*z[:,k]*z[:,p]*z[:,q])
-
-        # Add Fourier terms
         if include_fourier:
             for i in range(latent_dim):
                 for k in range(1, n_frequencies + 1):
-                    library.append(tf.sin(k * z[:,i]))
-                    library.append(tf.cos(k * z[:,i]))
+                    library.append(tf.sin(k * z[:, :, i:i+1]))
+                    library.append(tf.cos(k * z[:, :, i:i+1]))
 
-        return tf.stack(library, axis=1)    
+        return tf.concat(library, axis=-1)
 
 
     #######################################################
@@ -274,7 +300,8 @@ class SindyAutoencoder(tf.keras.Model):
         super(SindyAutoencoder, self).__init__(**kwargs)
         self.params = params
         self.latent_dim = params['latent_dim']
-        self.input_dim = params['input_dim'] * params['n_time_series']
+        self.input_dim = params['input_dim']
+        self.n_time_series = params['n_time_series']
         self.widths = params['widths']
         self.activation = params['activation']
         self.library_dim = params['library_dim']
@@ -303,8 +330,8 @@ class SindyAutoencoder(tf.keras.Model):
         self.time = tf.constant(value=np.linspace(0.0, params['dt']*params['input_dim'], params['input_dim'], endpoint=False))
         self.dt = tf.constant(value=params['dt'], dtype=tf.float32)
         
-        self.encoder = self.make_network(self.input_dim, self.latent_dim, self.widths, name='encoder')
-        self.decoder = self.make_network(self.latent_dim, self.input_dim, self.widths[::-1], name='decoder')
+        self.encoder = self.make_network((self.input_dim,self.n_time_series), self.latent_dim, self.widths, name='encoder')
+        self.decoder = self.make_network(self.latent_dim, (self.input_dim*self.n_time_series), self.widths[::-1], name='decoder')
         if not self.trainable_auto:
             self.encoder._trainable = False
             self.decoder._trainable = False
@@ -315,20 +342,42 @@ class SindyAutoencoder(tf.keras.Model):
 
     
     def make_network(self, input_dim, output_dim, widths, name):
+        # print('output_dim', output_dim)
+        # print('input_dim', input_dim)
         out_activation = 'linear'
-        initializer= tf.keras.initializers.VarianceScaling(scale=2.0, mode="fan_avg", distribution="uniform")
+        initializer = tf.keras.initializers.VarianceScaling(scale=2.0, mode="fan_avg", distribution="uniform")
         model = tf.keras.Sequential()
+
+        if name == 'encoder':
+            model.add(tf.keras.layers.Input(shape=input_dim))
+            model.add(tf.keras.layers.Flatten())
+
+        if name == 'decoder':
+            model.add(tf.keras.layers.Input(shape=(2, 3)))
+            # model.add(tf.keras.layers.Reshape((self.latent_dim, self.n_time_series)))
+        
         for i, w in enumerate(widths):
-            if i ==0:
+            if i == 0:
                 use_bias = self.use_bias
             else:
                 use_bias = True 
             model.add(tf.keras.layers.Dense(w, activation=self.activation, kernel_initializer=initializer, name=name+'_'+str(i), use_bias=use_bias, kernel_regularizer=regularizers.l1_l2(l1=self.l1, l2=self.l2)))
-        model.add(tf.keras.layers.Dense(output_dim, activation=out_activation, kernel_initializer=initializer, name=name+'_'+'out', use_bias=self.use_bias))
+        
+        if name == 'encoder':
+            # For encoder, reshape to (None, 2, 3) before final output
+            model.add(tf.keras.layers.Dense((self.latent_dim*self.n_time_series), activation=out_activation, kernel_initializer=initializer, name=name+'_'+'out', use_bias=self.use_bias))
+            model.add(tf.keras.layers.Reshape((self.latent_dim, self.n_time_series)))
+        elif name == 'decoder':
+            # For decoder, use Dense layer to get to the right dimension, then reshape
+            model.add(tf.keras.layers.Dense((128*3), activation=out_activation, kernel_initializer=initializer, name=name+'_'+'out', use_bias=self.use_bias))
+            # model.add(tf.keras.layers.Reshape((self.input_dim, self.n_time_series)))
+        else:
+            model.add(tf.keras.layers.Dense(output_dim, activation=out_activation, kernel_initializer=initializer, name=name+'_'+'out', use_bias=self.use_bias))
+
         return model
                 
     def call(self, datain):
-        x = datain[0][:, :self.params['input_dim']]
+        x = datain[0]  # Shape should be (None, 3, 128)
         return self.decoder(self.encoder(x))
     
     def get_config(self):
@@ -383,11 +432,11 @@ class SindyAutoencoder(tf.keras.Model):
     @tf.function
     def train_step(self, data):
         inputs, outputs = data
-        x = inputs[0][:, :self.params['input_dim']]
-        x_future = inputs[0][:, self.params['input_dim']:]
-        dx_dt = tf.expand_dims(inputs[1][:,:self.params['input_dim']], 2)
-        x_out = outputs[0][:, :self.params['input_dim']]
-        dx_dt_out =  tf.expand_dims(outputs[1][:,:self.params['input_dim']], 2)
+        x = inputs[0][:,:,:self.params['input_dim']]
+        x_future = inputs[0][:,:,self.params['input_dim']:]
+        dx_dt = tf.expand_dims(inputs[1][:,:,:self.params['input_dim']], 3)
+        x_out = outputs[0][:,:,:self.params['input_dim']]
+        dx_dt_out =  tf.expand_dims(inputs[1][:,:,:self.params['input_dim']], 3)
 
 
         with tf.GradientTape() as tape:
@@ -406,11 +455,11 @@ class SindyAutoencoder(tf.keras.Model):
     @tf.function
     def test_step(self, data):
         inputs, outputs = data
-        x = inputs[0][:, :self.params['input_dim']]
-        x_future = inputs[0][:, self.params['input_dim']:]
-        dx_dt = tf.expand_dims(inputs[1][:,:self.params['input_dim']], 2)
-        x_out = outputs[0][:, :self.params['input_dim']]
-        dx_dt_out =  tf.expand_dims(outputs[1][:,:self.params['input_dim']], 2)
+        x = inputs[0][:,:,:self.params['input_dim']]
+        x_future = inputs[0][:,:,self.params['input_dim']:]
+        dx_dt = tf.expand_dims(inputs[1][:,:,:self.params['input_dim']], 2)
+        x_out = outputs[0][:,:,:self.params['input_dim']]
+        dx_dt_out =  tf.expand_dims(inputs[1][:,:,:self.params['input_dim']], 2)
         
         loss, losses = self.get_loss(x, dx_dt, x_out, dx_dt_out, x_future)
         
@@ -423,31 +472,74 @@ class SindyAutoencoder(tf.keras.Model):
 
     @tf.function
     def get_loss(self, x, dx_dt, x_out, dx_dt_out, x_future):
+        print('x', x.shape)
+        print('dx_dt', dx_dt.shape)
+        print('x_out', x_out.shape)
+        print('dx_dt_out', dx_dt_out.shape)
+        print('x_future', x_future.shape)
         losses = {}
         loss = 0
         if self.params['loss_weight_sindy_z'] > 0.0:
             with tf.GradientTape() as t1:
                 t1.watch(x)
                 z = self.encoder(x, training=self.trainable_auto)
+            print('z comp', z.shape)  # Should be (None, latent_dim)
             dz_dx = t1.batch_jacobian(z, x)
-            dz_dt = tf.matmul( dz_dx, dx_dt )
+            print('dz_dx', dz_dx.shape)  # Should be (None, 2, 3, 128)
+
+            dx_dt_reshaped = tf.squeeze(dx_dt, axis=3)
+            print('dx_dt_reshaped', dx_dt_reshaped.shape)  # Should be (None, 3, 128)
+
+            dz_dts = []
+            for i in range(dz_dx.shape[1]):
+                dz_dx_i = dz_dx[:, i]
+                print('dz_dx_i', dz_dx_i.shape)  # Should be (None, 3, 128)
+                
+                # Transpose dx_dt_reshaped to make dimensions compatible
+                dx_dt_transposed = tf.transpose(dx_dt_reshaped, perm=[0, 2, 1])
+                print('dx_dt_transposed', dx_dt_transposed.shape)  # Should be (None, 128, 3)
+                
+                operation_res = tf.matmul(dz_dx_i, dx_dt_transposed)
+                print('operation_res', operation_res.shape)  # Should be (None, 3, 3)
+                dz_dts.append(operation_res)
+
+            dz_dt = tf.stack(dz_dts, axis=1)
+            print('dz_dt final', dz_dt.shape)  # Should be (None, 2, 3, 3)
+
         else:
             z = self.encoder(x, training=self.trainable_auto)
 
+
         if self.params['loss_weight_sindy_x'] > 0.0:
+            print(f"z shape: {z.shape}")  # Should be (None, latent_dim)
             with tf.GradientTape() as t2:
                 t2.watch(z)
                 xh = self.decoder(z, training=self.trainable_auto)
+            print('xh', xh.shape)  # Should be (None, 3, 128)
             dxh_dz = t2.batch_jacobian(xh, z)
-            dz_dt_sindy = tf.expand_dims(self.sindy(z), 2)
-            dxh_dt = tf.matmul( dxh_dz, dz_dt_sindy )
+            ## dxh_dz shape is (None, 128, 128, latent_dim) switch to (None, 3, 128, latent_dim)
+            dxh_dz = tf.transpose(dxh_dz, perm=[0, 2, 1, 3])
+            print('dxh_dz', dxh_dz.shape)  # Should be (None, 3, 128, latent_dim)
+            dz_dt_sindy = self.sindy(z)
+            print('dz_dt_sindy', dz_dt_sindy.shape)  # Should be (None, latent_dim)
+            
+            # Reshape dz_dt_sindy to (None, latent_dim, 1)
+            dz_dt_sindy_reshaped = tf.expand_dims(dz_dt_sindy, axis=-1)
+            
+            # Perform the matrix multiplication
+            dxh_dt = tf.matmul(dxh_dz, dz_dt_sindy_reshaped)
+            
+            # The result should now have shape (None, 3, 128, 1)
+            print('dxh_dt', dxh_dt.shape)
         else:
-            xh = self.decoder(z, training=self.trainable_auto) 
+            xh = self.decoder(z, training=self.trainable_auto)
 
         # SINDy consistency loss
         if self.params['loss_weight_integral'] > 0.0:
+            print('z', z[:, 0,0].shape)
+            print('x', x[:, 0,0].shape)
             sol = z 
-            loss_int = tf.square(sol[:, 0] - x[:, 0]) 
+            loss_int = tf.square(sol[:, 0,0] - x[:, 0,0]) 
             total_steps = len(self.time)
             for i in range(1, len(self.time)):
                 k1 = self.sindy(sol)
@@ -457,13 +549,16 @@ class SindyAutoencoder(tf.keras.Model):
                 sol = sol + 1/6 * self.dt * (k1 + 2*k2 + 2*k3 + k4) 
                 # To avoid nans - tf.where(tf.is_nan()) not compatible with gradients 
                 sol = tf.where(tf.abs(sol) > 500.00, 500.0, sol) 
-                loss_int += tf.square(sol[:, 0] - x[:, i])
+                loss_int += tf.square(sol[:, 0,0] - x[:, 0,i])
             loss += self.params['loss_weight_integral'] * loss_int / total_steps 
             losses['integral'] = loss_int
 
 
         if self.params['loss_weight_sindy_x'] > 0.0:
             # loss_dx = tf.reduce_mean( tf.square(dxh_dt - dx_dt_out) ) 
+            print('variable_weights', self.variable_weights)
+            print('dxh_dt', dxh_dt.shape)
+            print('dx_dt_out', dx_dt_out.shape)
             loss_dx = tf.reduce_mean(
                 tf.multiply(
                     self.variable_weights,
@@ -479,9 +574,17 @@ class SindyAutoencoder(tf.keras.Model):
             losses['sindy_z'] = loss_dz
 
         if self.params['loss_weight_x0'] > 0.0:
-            loss_x0 = tf.reduce_mean( tf.square(z[:, 0] - x[:, 0]) )
+            loss_x0 = tf.reduce_mean( tf.square(z[:, 0, 0] - x[:, 0, 0]) )
             loss += self.params['loss_weight_x0'] * loss_x0
             losses['x0'] = loss_x0
+
+        # loss_rec = tf.reduce_mean( tf.square(xh - x_out) )
+        loss_rec = tf.reduce_mean(
+            tf.multiply(
+                self.variable_weights,
+                tf.reduce_mean(tf.square(xh - x_out), axis=0)
+            )
+        )
 
         if self.params['loss_weight_prediction'] > 0.0:
             future_steps = self.params['future_steps']
@@ -490,13 +593,6 @@ class SindyAutoencoder(tf.keras.Model):
             loss += self.params['loss_weight_prediction'] * loss_pred
             losses['prediction'] = loss_pred
 
-        loss_rec = tf.reduce_mean( tf.square(xh - x_out) )
-        # loss_rec = tf.reduce_mean(
-        #     tf.multiply(
-        #         self.variable_weights,
-        #         tf.reduce_mean(tf.square(xh - x_out), axis=0)
-        #     )
-        # )
 
         # Add future prediction loss
         x_pred_future = self.predict_future(x[:, 0], x_future.shape[1])

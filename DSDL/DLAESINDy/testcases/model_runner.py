@@ -75,5 +75,6 @@ data_builder = DatasetConstructorMulti(input_dim=params['input_dim'],
                 future_steps=params['future_steps'],)
 data_builder.build_solution(data_dict)
 train_data = data_builder.get_data()
+print(train_data['x'].shape)    
 trainer = TrainModel(train_data, params)
 trainer.fit() 

@@ -73,10 +73,16 @@ class TrainModel:
         
         return params
 
-    def get_data(self):
+    def train_test_split(self):
         # Split into train and test sets
-        train_x, test_x = train_test_split(self.data['x'].T, train_size=self.params['train_ratio'], shuffle=False)
-        train_dx, test_dx = train_test_split(self.data['dx'].T, train_size=self.params['train_ratio'], shuffle=False)
+        len_data = self.data['x'].shape[0]
+        test_split = int(len_data * self.params['train_ratio'])
+        train_x = self.data['x'][:,:,:test_split]
+        test_x = self.data['x'][:,:,test_split:]
+        train_dx = self.data['dx'][:,:,:test_split]
+        test_dx = self.data['dx'][:,:,test_split:]
+        # train_x, test_x = train_test_split(self.data['x'].T, train_size=self.params['train_ratio'], shuffle=False)
+        # train_dx, test_dx = train_test_split(self.data['dx'].T, train_size=self.params['train_ratio'], shuffle=False)
         train_data = [train_x, train_dx]  
         test_data = [test_x, test_dx]  
         
@@ -116,9 +122,10 @@ class TrainModel:
         return model
 
     def fit(self):
-        train_data, test_data = self.get_data()
+        train_data, test_data = self.train_test_split()
         self.save_params()
         print(self.savename)
+        print(f"in fit: {train_data[0].shape}") 
         
         # Create directory and file name
         os.makedirs(os.path.join(self.params['data_path'], self.savename), exist_ok=True)

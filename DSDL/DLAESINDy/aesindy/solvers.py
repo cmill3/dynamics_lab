@@ -125,6 +125,7 @@ class DatasetConstructor:
             print(len(xr))
             print(xr)
             n_steps = len(xr) - n
+            print(f"n_steps: {n_steps}")
             xj = np.zeros((n_steps, n_delays))
             dxj = np.zeros((n_steps, n_delays))
             for k in range(n_steps):
@@ -152,12 +153,14 @@ class DatasetConstructorMulti:
                  input_dim=128,
                  interp_dt=0.01,
                  savgol_interp_coefs=[21, 3],
-                 interp_kind='cubic'):
+                 interp_kind='cubic',
+                 future_steps=10):
 
         self.input_dim = input_dim
         self.interp_dt = interp_dt 
         self.savgol_interp_coefs = savgol_interp_coefs
         self.interp_kind = interp_kind
+        self.future_steps = future_steps
 
     def get_data(self):
         return {
@@ -187,34 +190,50 @@ class DatasetConstructorMulti:
             print(f"dx: {dx}")
             deriv_data.append(dx)
         
-        n_delays = self.input_dim
+        n = self.input_dim 
+        if self.future_steps > 0:
+            n += self.future_steps
+        n_delays = n
         xic = []
         dxic = []
         
         print(f"n_variables: {n_variables}")
+        print(f"n_delays: {n_delays}")
         for i in range(n_variables):
             xic_var = []
             dxic_var = []
             for j, xr in enumerate(raw_data[i]):
-                print(j)
-                print(xr)
-                n_steps = len(xr) - self.input_dim 
+                print(f"Variable {i}, Series {j}")
+                n_steps = len(xr) - n_delays
+                print(f"n_steps: {n_steps}")
                 xj = np.zeros((n_steps, n_delays))
                 dxj = np.zeros((n_steps, n_delays))
                 for k in range(n_steps):
                     xj[k, :] = xr[k:n_delays+k]
                     dxj[k, :] = deriv_data[i][j][k:n_delays+k]
+                print(f"xj: {xj.shape}")
+                print(f"dxj: {dxj.shape}")
                 xic_var.append(xj)
                 dxic_var.append(dxj)
+            
+            # Stack all series for this variable
             xic.append(np.vstack(xic_var))
             dxic.append(np.vstack(dxic_var))
-        
-        H = np.hstack(xic)
-        dH = np.hstack(dxic)
-        
+
+        # Stack all variables side by side
+        H = np.stack(xic, axis=-1)  # Shape: (batch, n_delays, n_variables)
+        print(f"H: {H.shape}")
+        dH = np.stack(dxic, axis=-1)
+
+        # Transpose to get (batch, n_variables, n_delays)
+        H = np.transpose(H, (0, 2, 1))
+        print(f"H transpose: {H.shape}")
+        dH = np.transpose(dH, (0, 2, 1))
+
         self.t = times
-        self.x = H.T
-        self.dx = dH.T
-        self.z = np.vstack([np.hstack(x_var) for x_var in raw_data])
-        self.dz = np.vstack([np.hstack(dx_var) for dx_var in dx])
+        self.x = H
+        self.dx = dH
+        self.z = np.stack([np.concatenate(x_var) for x_var in raw_data], axis=-1)
+        self.dz = np.stack([np.concatenate(dx_var) for dx_var in deriv_data], axis=-1)
         self.sindy_coefficients = None  # unused
+        print(f" self x: {self.x.shape}")
