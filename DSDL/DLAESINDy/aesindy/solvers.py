@@ -3,6 +3,7 @@ from sklearn.model_selection import train_test_split
 from scipy.integrate import odeint
 from scipy import interpolate
 from scipy.signal import savgol_filter
+from sklearn.base import BaseEstimator, TransformerMixin
 from .dynamical_models import get_model
 from .helper_functions import get_hankel
 from tqdm import tqdm
@@ -173,21 +174,19 @@ class DatasetConstructorMulti:
         }
     
     def build_solution(self, data):
-        n_realizations = len(data['raw_data'][0])  # Assuming 'x' is a list of lists
-        print(f" n_realizations: {n_realizations}")
-        n_variables = len(data['raw_data'])  # Number of time series
+        n_realizations = len(data['input_data'][0])  # Assuming 'x' is a list of lists
+        n_variables = len(data['input_data'])  # Number of time series
         dt = data['dt']
         
         if 'time' in data.keys():
             times = data['time']
         elif 'dt' in data.keys():
-            times = np.linspace(0, dt * len(data['raw_data']), len(data['raw_data']), endpoint=False)
+            times = np.linspace(0, dt * len(data['input_data']), len(data['input_data']), endpoint=False)
         
-        raw_data = data['raw_data']
+        input_data = data['input_data']
         deriv_data = []
-        for x_var in raw_data:
+        for x_var in input_data:
             dx = [np.gradient(xr, dt) for xr in x_var]
-            print(f"dx: {dx}")
             deriv_data.append(dx)
         
         n = self.input_dim 
@@ -196,23 +195,17 @@ class DatasetConstructorMulti:
         n_delays = n
         xic = []
         dxic = []
-        
-        print(f"n_variables: {n_variables}")
-        print(f"n_delays: {n_delays}")
+
         for i in range(n_variables):
             xic_var = []
             dxic_var = []
-            for j, xr in enumerate(raw_data[i]):
-                print(f"Variable {i}, Series {j}")
+            for j, xr in enumerate(input_data[i]):
                 n_steps = len(xr) - n_delays
-                print(f"n_steps: {n_steps}")
                 xj = np.zeros((n_steps, n_delays))
                 dxj = np.zeros((n_steps, n_delays))
                 for k in range(n_steps):
                     xj[k, :] = xr[k:n_delays+k]
                     dxj[k, :] = deriv_data[i][j][k:n_delays+k]
-                print(f"xj: {xj.shape}")
-                print(f"dxj: {dxj.shape}")
                 xic_var.append(xj)
                 dxic_var.append(dxj)
             
@@ -222,18 +215,88 @@ class DatasetConstructorMulti:
 
         # Stack all variables side by side
         H = np.stack(xic, axis=-1)  # Shape: (batch, n_delays, n_variables)
-        print(f"H: {H.shape}")
         dH = np.stack(dxic, axis=-1)
 
         # Transpose to get (batch, n_variables, n_delays)
         H = np.transpose(H, (0, 2, 1))
-        print(f"H transpose: {H.shape}")
         dH = np.transpose(dH, (0, 2, 1))
 
         self.t = times
         self.x = H
         self.dx = dH
-        self.z = np.stack([np.concatenate(x_var) for x_var in raw_data], axis=-1)
+        self.z = np.stack([np.concatenate(x_var) for x_var in input_data], axis=-1)
         self.dz = np.stack([np.concatenate(dx_var) for dx_var in deriv_data], axis=-1)
         self.sindy_coefficients = None  # unused
-        print(f" self x: {self.x.shape}")
+
+
+class TemporalFeatureScaler(BaseEstimator, TransformerMixin):
+    def __init__(self, window_size=100, min_periods=10, scaling_method='rolling', prediction_horizon=8):
+        self.window_size = window_size
+        self.min_periods = min_periods
+        self.scaling_method = scaling_method
+        self.prediction_horizon = prediction_horizon
+        self.feature_scalers = {}
+
+    def fit(self, X, y=None):
+        # X should be a pandas DataFrame
+        for column in X.columns:
+            if self.scaling_method == 'expanding':
+                self.feature_scalers[column] = {
+                    'mean': X[column].expanding(min_periods=self.min_periods).mean(),
+                    'std': X[column].expanding(min_periods=self.min_periods).std()
+                }
+            elif self.scaling_method == 'rolling':
+                ## double check if this is correct
+                self.feature_scalers[column] = {
+                    'mean': X[column].rolling(window=self.window_size, min_periods=self.min_periods).mean(),
+                    'std': X[column].rolling(window=self.window_size, min_periods=self.min_periods).std()
+                }
+        return self
+
+    def transform(self, X):
+        X_scaled = X.copy()
+        for column in X.columns:
+            if column in self.feature_scalers:
+                mean = self.feature_scalers[column]['mean']
+                std = self.feature_scalers[column]['std']
+                
+                # Update rolling statistics
+                # if self.scaling_method == 'rolling':
+                #     mean = mean.append(X[column].rolling(window=self.window_size, min_periods=self.min_periods).mean())
+                #     std = std.append(X[column].rolling(window=self.window_size, min_periods=self.min_periods).std())
+                #     self.feature_scalers[column]['mean'] = mean
+                #     self.feature_scalers[column]['std'] = std
+                
+                # Apply normalization using the updated statistics
+                X_scaled[column] = (X[column] - mean) / (std + 1e-8)
+                
+                # Handle NaNs
+                X_scaled[column] = X_scaled[column].fillna(method='ffill').fillna(0)
+        
+        return X_scaled
+
+
+    def inverse_transform(self, X, evaluation_column, alert_index, model_hyperparameters):
+        X_inverse = X.cpu().detach().numpy()
+        if evaluation_column == 'h':
+            target = X_inverse[:, 1]
+        elif evaluation_column == 'l':
+            target = X_inverse[:, 2]
+
+        # try:
+        mean = self.feature_scalers[evaluation_column]['mean'].reset_index(drop=True)
+        std = self.feature_scalers[evaluation_column]['std'].reset_index(drop=True)
+        # instance_start = alert_index - model_hyperparameters['context_length']
+        instance_std = std[alert_index:alert_index + model_hyperparameters['prediction_horizon']]
+        instance_mean = mean[alert_index:alert_index + model_hyperparameters['prediction_horizon']]
+
+        unscaled_target = (target * instance_std) + instance_mean
+        # except:
+        #     print(f"Error in inverse transform for column {column}")
+        return unscaled_target
+    
+
+def scale_dataset(data, params):
+    temporal_scaler = TemporalFeatureScaler(window_size=params['input_dim'], min_periods=10, scaling_method='rolling', prediction_horizon=params['future_steps'])
+    scaled_data = temporal_scaler.fit_transform(data)
+    return scaled_data

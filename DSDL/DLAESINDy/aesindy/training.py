@@ -77,10 +77,10 @@ class TrainModel:
         # Split into train and test sets
         len_data = self.data['x'].shape[0]
         test_split = int(len_data * self.params['train_ratio'])
-        train_x = self.data['x'][:,:,:test_split]
-        test_x = self.data['x'][:,:,test_split:]
-        train_dx = self.data['dx'][:,:,:test_split]
-        test_dx = self.data['dx'][:,:,test_split:]
+        train_x = self.data['x'][:test_split,:,:]
+        test_x = self.data['x'][test_split:,:,:]
+        train_dx = self.data['dx'][:test_split,:,:]
+        test_dx = self.data['dx'][test_split:,:,:]
         # train_x, test_x = train_test_split(self.data['x'].T, train_size=self.params['train_ratio'], shuffle=False)
         # train_dx, test_dx = train_test_split(self.data['dx'].T, train_size=self.params['train_ratio'], shuffle=False)
         train_data = [train_x, train_dx]  
@@ -125,7 +125,6 @@ class TrainModel:
         train_data, test_data = self.train_test_split()
         self.save_params()
         print(self.savename)
-        print(f"in fit: {train_data[0].shape}") 
         
         # Create directory and file name
         os.makedirs(os.path.join(self.params['data_path'], self.savename), exist_ok=True)
@@ -136,7 +135,6 @@ class TrainModel:
         self.model.compile(optimizer=optimizer, loss='mse')
 
         callback_list = get_callbacks(self.params, train_data, self.savename, x=test_data[1])
-        print('Fitting model..')
         self.history = self.model.fit(
                 x=train_data, y=train_data, 
                 batch_size=self.params['batch_size'],
@@ -229,12 +227,12 @@ class CustomTerminateOnNaN(tf.keras.callbacks.Callback):
         super().__init__()
         self.log_collector = log_collector
 
-    def on_epoch_end(self, epoch, logs=None):
+    def on_batch_end(self, batch, logs=None):
         logs = logs or {}
         loss = logs.get('rec_loss')
         if loss is not None:
             if np.isnan(loss) or np.isinf(loss):
-                print('Batch %d: Invalid loss, terminating training' % (epoch))
+                print('Batch %d: Invalid loss, terminating training' % (batch))
                 self.model.stop_training = True
 
 class BestRecLossCallback(tf.keras.callbacks.Callback):

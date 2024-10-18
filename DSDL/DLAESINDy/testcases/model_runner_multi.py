@@ -71,7 +71,7 @@ if params['scale']:
     scaled_data = raw_data.copy()
     scaled_data = scale_dataset(scaled_data, params)
     data_dict = {
-    'raw_data':[[scaled_data['x'].values], [scaled_data['v'].values], [scaled_data['range_vol'].values]],
+    'input_data':[[scaled_data['x'].values], [scaled_data['v'].values], [scaled_data['range_vol'].values]],
     'dt': 900
     }
 else:

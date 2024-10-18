@@ -39,14 +39,16 @@ def update_params_from_wandb(params, wandb_config):
 
 def model_runner(wandb_params, input_data):
     params = update_params_from_wandb(default_params, wandb_params)
-    params['model'] = 'qqq'
+    params['model'] = 'spy'
     params['case'] = 'hyp'
     params['use_wandb'] = True
+    params['variable_weights'] = [.8,.1,.1]
+    params['n_time_series'] = 3
     print(params)
     ## slice the data based on a fractional proportion, must remain in sequential order
     input_data = input_data[int(params['data_length']*len(input_data)):]
     data_dict = {
-        'raw_data':[[input_data['x'].values], [input_data['v'].values], [input_data['range_vol'].values]],
+        'input_data':[[input_data['x'].values], [input_data['v'].values], [input_data['range_vol'].values]],
         'dt': 900
         }
     data_builder = DatasetConstructorMulti(
@@ -107,16 +109,17 @@ def wandb_sweep(data):
             "sindycall_freq": {'values': [20,50,75]},
             "loss_weight_prediction": {'values': [0.5,1.0,1.5]},
             "future_steps": {'values': [4,8]},
+            # "variable_weights": {'values': [[.8,.1,.1],[.6,.2,.2],[.5,.3,.2]]}
         }
     }
 
     # Initialize the sweep
-    sweep_id = wandb.sweep(sweep_config, project="DLAESINDy")
+    sweep_id = wandb.sweep(sweep_config, project="DLAESINDy_multi")
 
     # Define the objective function for the sweep
     def sweep_train():
 
-        wandb.init(project="DLAESINDy", config=wandb.config)
+        wandb.init(project="DLAESINDy_multi", config=wandb.config)
         model_runner(wandb.config, data)
 
     # Start the sweep
