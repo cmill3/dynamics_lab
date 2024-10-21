@@ -42,7 +42,7 @@ def model_runner(wandb_params, input_data):
     params['model'] = 'spy'
     params['case'] = 'hyp'
     params['use_wandb'] = True
-    params['variable_weights'] = [.8,.1,.1]
+    params['variable_weights'] = [1,0.0,0.0]
     params['n_time_series'] = 3
     print(params)
     ## slice the data based on a fractional proportion, must remain in sequential order
