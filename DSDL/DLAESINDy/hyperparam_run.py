@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from DSDL.DLAESINDy.default_params import default_params
+from default_params import default_params
 import numpy as np
 from aesindy.solvers import DatasetConstructor
 from aesindy.training import TrainModel
@@ -42,7 +42,7 @@ def model_runner(wandb_params, raw_data):
     params['model'] = 'qqq'
     params['case'] = 'hyp'
     params['use_wandb'] = True
-    params['prediciton_mode'] = 'max'
+    params['prediciton_mode'] = 'close'
     print(params)
     ## slice the data based on a fractional proportion, must remain in sequential order
     raw_data = raw_data[int(params['data_length']*len(raw_data)):]
@@ -73,7 +73,6 @@ def wandb_sweep(data):
     # Hyperparameters
     sweep_config = {
         'method': 'bayes', 
-        'program': '/Users/charlesmiller/Documents/Code/IIE/dynamics_lab/DSDL/DLAESINDy/testcases/hyperparam_run.pycd',
         'bayes': {
             'bayes_initial_samples': 75,
             'exploration_factor': 0.2,
