@@ -39,10 +39,10 @@ def update_params_from_wandb(params, wandb_config):
 
 def model_runner(wandb_params, input_data):
     params = update_params_from_wandb(default_params, wandb_params)
-    params['model'] = 'spy'
+    params['model'] = 'qqq'
     params['case'] = 'hyp'
     params['use_wandb'] = True
-    params['variable_weights'] = [.8,.1,.1]
+    params['variable_weights'] = [1,0.0,0.0]
     params['n_time_series'] = 3
     print(params)
     ## slice the data based on a fractional proportion, must remain in sequential order
@@ -127,7 +127,7 @@ def wandb_sweep(data):
 
 
 if __name__ == '__main__':
-    raw_data = call_polygon('SPY','2012-01-01','2024-06-01','minute',15)
+    raw_data = call_polygon('QQQ','2012-01-01','2024-06-01','minute',15)
     raw_data = raw_data[['c','v','range_vol']]
     raw_data = raw_data.rename(columns={'c':'x'})
     print(raw_data.columns)
