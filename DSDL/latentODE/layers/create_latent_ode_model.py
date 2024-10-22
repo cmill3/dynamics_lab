@@ -11,13 +11,13 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import relu
 
-import lib.utils as utils
-from lib.latent_ode import LatentODE
-from lib.encoder_decoder import *
-from lib.diffeq_solver import DiffeqSolver
+import layers.utils as utils
+from layers.latent_ode import LatentODE
+from layers.encoder_decoder import *
+from layers.diffeq_solver import DiffeqSolver
 
 from torch.distributions.normal import Normal
-from lib.ode_func import ODEFunc, ODEFunc_w_Poisson
+from layers.ode_func import ODEFunc, ODEFunc_w_Poisson
 
 #####################################################################################################
 
