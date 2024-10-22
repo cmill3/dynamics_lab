@@ -101,6 +101,7 @@ def call_polygon(symbol,from_str,to_str,timespan,multiplier):
         results_df['day'] = results_df['date'].apply(lambda x: x.day)
         results_df['minute'] = results_df['date'].apply(lambda x: x.minute)
         results_df = results_df.loc[(results_df['hour'] >= 9) & (results_df['hour'] < 16)]
+        results_df['range_vol'] = (results_df['h'] - results_df['l'])/results_df['o']
         all_results.append(results_df)
         # except Exception as e:
         #     print(f"call polygon {e}")

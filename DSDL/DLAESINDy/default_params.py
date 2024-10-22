@@ -85,3 +85,6 @@ default_params['n_frequencies'] = 2
 default_params['future_steps'] = 8  # Number of future steps to predict
 default_params['prediction_mode'] = 'close'
 
+default_params['loss_weight_prediction'] = 1.0  # Weight for future prediction loss
+default_params['n_time_series'] = 1 # Weight for future prediction loss
+default_params['variable_weights'] = [1.0] # Weight for future prediction loss

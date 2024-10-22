@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 from aesindy.solvers import DatasetConstructorMulti, scale_dataset
 from aesindy.training import TrainModel
-from DSDL.DLAESINDy.default_params import default_params as params
+from default_params import default_params as params
 from aesindy.helper_functions import call_polygon
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -50,10 +50,11 @@ params['sindy_threshold'] = 0.2
 params['threshold_frequency'] = 10
 params['use_sindycall'] = True
 params['sindy_init_scale'] = 7.0
-params['sindycall_freq'] = 30
-params['future_steps'] = 8  # Number of future steps to predict
-params['loss_weight_prediction'] = 1.0  # Weight for future prediction loss
-params['prediction_mode'] = 'max'
+params['sindycall_freq'] = 35
+params['n_time_series'] = 3
+params['variable_weights'] = [.8,.1,.1]
+params['future_steps'] = 10  # Number of future steps to predict
+params['loss_weight_future'] = 1.0  # Weight for future prediction loss
 
 print(params)
 
@@ -70,7 +71,7 @@ if params['scale']:
     scaled_data = raw_data.copy()
     scaled_data = scale_dataset(scaled_data, params)
     data_dict = {
-    'raw_data':[[scaled_data['x'].values], [scaled_data['v'].values], [scaled_data['range_vol'].values]],
+    'input_data':[[scaled_data['x'].values], [scaled_data['v'].values], [scaled_data['range_vol'].values]],
     'dt': 900
     }
 else:

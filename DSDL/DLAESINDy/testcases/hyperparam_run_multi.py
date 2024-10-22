@@ -39,15 +39,16 @@ def update_params_from_wandb(params, wandb_config):
 
 def model_runner(wandb_params, input_data):
     params = update_params_from_wandb(default_params, wandb_params)
-    params['model'] = 'qqq'
+    params['model'] = 'spy'
     params['case'] = 'hyp'
     params['use_wandb'] = True
-    params['prediciton_mode'] = 'close'
+    params['variable_weights'] = [1,0.0,0.0]
+    params['n_time_series'] = 3
     print(params)
     ## slice the data based on a fractional proportion, must remain in sequential order
     input_data = input_data[int(params['data_length']*len(input_data)):]
     data_dict = {
-        'raw_data':[[input_data['x'].values], [input_data['v'].values], [input_data['range_vol'].values]],
+        'input_data':[[input_data['x'].values], [input_data['v'].values], [input_data['range_vol'].values]],
         'dt': 900
         }
     data_builder = DatasetConstructorMulti(
@@ -83,37 +84,42 @@ def wandb_sweep(data):
             'goal': 'minimize'
         },
         "parameters": {
-            "learning_rate": {'values': [0.001,.0001]},
-            "latent_dim": {'values': [2,3,4,6]},
+            "learning_rate": {'values': [0.003,0.001,.0001]},
+            "latent_dim": {'values': [2,3,4,5,8]},
             "input_dim": {'values': [64,128,256]},
             "poly_order": {'values': [2,3]},
+            "include_fourier": {'values': [True, False]},
             "n_frequencies": {'values': [2,3,4]},
             "loss_weight_layer_l2": {'values': [.0,0.05]},
-            "loss_weight_x0": {'values': [0.03,0.05]},
+            "loss_weight_x0": {'values': [0.01,0.05]},
             "loss_weight_integral": {'values': [0.01,0.05,0.1]},
             "loss_weight_sindy_regularization": {'values': [1e-5,1e-3,1e-1]},
-            "loss_weight_prediction": {'values': [0.5,1.0]},
             "loss_weight_rec": {'values': [0.3,0.6,0.9]},
             "loss_weight_sindy_z": {'values': [0.001,0.0001]},
-            "loss_weight_sindy_x": {'values': [0.0003,0.0001]},
-            "batch_size": {'values': [32,64]},
-            "data_length": {'values': [0.5,.75]},
+            "loss_weight_sindy_x": {'values': [0.001,0.0001]},
+            "batch_size": {'values': [32,128]},
+            "data_length": {'values': [0,.25,.5,.75]},
             "widths_ratios": {'values': [[0.5,0.25],[0.75,0.5,0.25],[0.8,0.6,0.4,0.2]]},
-            "sindy_threshold": {'values': [0.2,0.3]},
-            "sindy_init_scale": {'values': [3.0,5.0]},
-            "threshold_frequency": {'values': [55,80]},
-            "coefficient_threshold": {'values': [1,2,3,4]},
-            "sindycall_freq": {'values': [55,80]},
+            "activation": {'values': ['elu','relu']},
+            "use_bias": {'values': [True, False]},
+            "sindy_threshold": {'values': [0.01,0.1,0.2,0.3]},
+            "sindy_init_scale": {'values': [3.0,5.0,7.0,10.0]},
+            "threshold_frequency": {'values': [10,20,40]},
+            "coefficient_threshold": {'values': [0.5,1,2,3,4]},
+            "sindycall_freq": {'values': [20,50,75]},
+            "loss_weight_prediction": {'values': [0.5,1.0,1.5]},
+            "future_steps": {'values': [4,8]},
+            # "variable_weights": {'values': [[.8,.1,.1],[.6,.2,.2],[.5,.3,.2]]}
         }
     }
 
     # Initialize the sweep
-    sweep_id = wandb.sweep(sweep_config, project="DLAESINDy")
+    sweep_id = wandb.sweep(sweep_config, project="DLAESINDy_multi")
 
     # Define the objective function for the sweep
     def sweep_train():
 
-        wandb.init(project="DLAESINDy", config=wandb.config)
+        wandb.init(project="DLAESINDy_multi", config=wandb.config)
         model_runner(wandb.config, data)
 
     # Start the sweep

@@ -60,18 +60,6 @@ class TrainModel:
         # print(self.data['xorig'].shape)
         params['widths'] = [int(i*input_dim) for i in params['widths_ratios']]
         
-        ## Constraining features according to model/case
-        # if params['exact_features']:
-        #     if params['model'] == 'lorenz':
-        #         params['library_dim'] = 5
-        #         self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([1, 2, 3, 5, 6]), :]
-        #     elif params['model'] == 'rossler':
-        #         params['library_dim'] = 5
-        #         self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([0, 1, 2, 3, 6]), :]
-        #     elif params['model'] == 'predprey':
-        #         params['library_dim'] = 3
-        #         self.data.sindy_coefficients = self.data.sindy_coefficients[np.array([1, 2, 4]), :]
-        # else:
         params['library_dim'] = library_size(
             params['latent_dim'], params['poly_order'], 
             params['include_fourier'], params['n_frequencies'],True)
@@ -81,28 +69,27 @@ class TrainModel:
         else:
             params['actual_coefficients'] = None
 
-        # if 'sparse_weighting' in params:
-        #     if params['sparse_weighting'] is not None:
-        #         a, sparse_weights = sindy_library(self.data.z[:100, :], params['poly_order'], include_sparse_weighting=True)
-        #         params['sparse_weighting'] = sparse_weights
+
         
         return params
 
-    def get_data(self):
+    def train_test_split(self):
         # Split into train and test sets
-        train_x, test_x = train_test_split(self.data['x'].T, train_size=self.params['train_ratio'], shuffle=False)
-        # val_x, test_x = train_test_split(val_x, train_size=self.params['test_ratio'], shuffle=False)
-        train_dx, test_dx = train_test_split(self.data['dx'].T, train_size=self.params['train_ratio'], shuffle=False)
-        # val_dx, test_dx = train_test_split(val_dx, train_size=self.params['test_ratio'], shuffle=False)
+        len_data = self.data['x'].shape[0]
+        test_split = int(len_data * self.params['train_ratio'])
+        train_x = self.data['x'][:test_split,:,:]
+        test_x = self.data['x'][test_split:,:,:]
+        train_dx = self.data['dx'][:test_split,:,:]
+        test_dx = self.data['dx'][test_split:,:,:]
+        # train_x, test_x = train_test_split(self.data['x'].T, train_size=self.params['train_ratio'], shuffle=False)
+        # train_dx, test_dx = train_test_split(self.data['dx'].T, train_size=self.params['train_ratio'], shuffle=False)
         train_data = [train_x, train_dx]  
         test_data = [test_x, test_dx]  
-        # val_data = [val_x, val_dx]
+        
         if self.params['svd_dim'] is not None:
             train_xorig, test_xorig = train_test_split(self.data['xorig'].T, train_size=self.params['train_ratio'], shuffle=False)
-            # val_xorig, test_xorig = train_test_split(val_xorig, train_size=self.params['test_ratio'], shuffle=False)
             train_data = [train_xorig] + train_data
             test_data = [test_xorig] + test_data 
-            # val_data = [val_xorig] + val_data
             
         return train_data, test_data
 
@@ -135,7 +122,7 @@ class TrainModel:
         return model
 
     def fit(self):
-        train_data, test_data = self.get_data()
+        train_data, test_data = self.train_test_split()
         self.save_params()
         print(self.savename)
         
@@ -148,7 +135,6 @@ class TrainModel:
         self.model.compile(optimizer=optimizer, loss='mse')
 
         callback_list = get_callbacks(self.params, train_data, self.savename, x=test_data[1])
-        print('Fitting model..')
         self.history = self.model.fit(
                 x=train_data, y=train_data, 
                 batch_size=self.params['batch_size'],
