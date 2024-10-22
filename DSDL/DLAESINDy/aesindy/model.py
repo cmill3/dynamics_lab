@@ -397,17 +397,20 @@ class SindyAutoencoder(tf.keras.Model):
         self.update_losses(loss, losses)
         metrics =  {m.name: m.result() for m in self.metrics}
         return metrics
+    
+    @tf.function
+    def get_prediction_loss(self, prediction, target):
+        if self.params['prediction_mode'] == "close":
+            return tf.reduce_mean(tf.square(prediction[:,-1] - target[:,-1]))
+        elif self.params['prediction_mode'] == "max":
+            return tf.reduce_mean(tf.square(tf.reduce_max(prediction, axis=1) - tf.reduce_max(target, axis=1)))
+        elif self.params['prediction_mode'] == "min":
+            return tf.reduce_mean(tf.square(tf.reduce_min(prediction, axis=1) - tf.reduce_min(target, axis=1)))
 
     
 
     @tf.function
     def get_loss(self, x, dx_dt, x_out, dx_dt_out, x_future):
-        print('--- Inside get_loss ---')
-        print('x shape:', x.shape)
-        print('dx_dt shape:', dx_dt.shape)
-        print('x_out shape:', x_out.shape)
-        print('dx_dt_out shape:', dx_dt_out.shape)
-        print("x_future shape:", tf.shape(x_future))
         losses = {}
         loss = 0
         if self.params['loss_weight_sindy_z'] > 0.0:

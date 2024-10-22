@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from default_params import default_params
+from DSDL.DLAESINDy.default_params import default_params
 import numpy as np
 from aesindy.solvers import DatasetConstructor
 from aesindy.training import TrainModel
@@ -42,6 +42,7 @@ def model_runner(wandb_params, raw_data):
     params['model'] = 'qqq'
     params['case'] = 'hyp'
     params['use_wandb'] = True
+    params['prediciton_mode'] = 'max'
     print(params)
     ## slice the data based on a fractional proportion, must remain in sequential order
     raw_data = raw_data[int(params['data_length']*len(raw_data)):]
@@ -53,7 +54,8 @@ def model_runner(wandb_params, raw_data):
                     interpolate=params['interpolate'],
                     interp_dt=params['interp_dt'],
                     savgol_interp_coefs=params['interp_coefs'],
-                    interp_kind=params['interp_kind'])
+                    interp_kind=params['interp_kind'],
+                    future_steps=params['future_steps'])
     data_builder.build_solution(data_dict)
     train_data = data_builder.get_data()
     trainer = TrainModel(train_data, params)
@@ -71,38 +73,37 @@ def wandb_sweep(data):
     # Hyperparameters
     sweep_config = {
         'method': 'bayes', 
+        'program': '/Users/charlesmiller/Documents/Code/IIE/dynamics_lab/DSDL/DLAESINDy/testcases/hyperparam_run.pycd',
         'bayes': {
             'bayes_initial_samples': 75,
             'exploration_factor': 0.2,
         },
         'metric': {
-            'name': 'current_best_val_rec_loss',
+            'name': 'current_best_val_prediction_loss',
             'goal': 'minimize'
         },
         "parameters": {
-            "learning_rate": {'values': [0.003,0.001,.0001]},
-            "latent_dim": {'values': [2,3,4,5,8]},
+            "learning_rate": {'values': [0.001,.0001]},
+            "latent_dim": {'values': [2,3,4,6]},
             "input_dim": {'values': [64,128,256]},
             "poly_order": {'values': [2,3]},
-            "include_fourier": {'values': [True, False]},
             "n_frequencies": {'values': [2,3,4]},
             "loss_weight_layer_l2": {'values': [.0,0.05]},
-            "loss_weight_x0": {'values': [0.01,0.05]},
+            "loss_weight_x0": {'values': [0.03,0.05]},
             "loss_weight_integral": {'values': [0.01,0.05,0.1]},
             "loss_weight_sindy_regularization": {'values': [1e-5,1e-3,1e-1]},
+            "loss_weight_prediction": {'values': [0.5,1.0]},
             "loss_weight_rec": {'values': [0.3,0.6,0.9]},
             "loss_weight_sindy_z": {'values': [0.001,0.0001]},
-            "loss_weight_sindy_x": {'values': [0.001,0.0001]},
-            "batch_size": {'values': [32,128]},
-            "data_length": {'values': [0,.25,.5,.75]},
+            "loss_weight_sindy_x": {'values': [0.0003,0.0001]},
+            "batch_size": {'values': [32,64]},
+            "data_length": {'values': [0.5,.75]},
             "widths_ratios": {'values': [[0.5,0.25],[0.75,0.5,0.25],[0.8,0.6,0.4,0.2]]},
-            "activation": {'values': ['elu','relu']},
-            "use_bias": {'values': [True, False]},
-            "sindy_threshold": {'values': [0.01,0.1,0.2,0.3]},
-            "sindy_init_scale": {'values': [3.0,5.0,7.0,10.0]},
-            "threshold_frequency": {'values': [10,20,40]},
-            "coefficient_threshold": {'values': [0.5,1,2,3,4]},
-            "sindycall_freq": {'values': [20,50,75]},
+            "sindy_threshold": {'values': [0.2,0.3]},
+            "sindy_init_scale": {'values': [3.0,5.0]},
+            "threshold_frequency": {'values': [55,80]},
+            "coefficient_threshold": {'values': [1,2,3,4]},
+            "sindycall_freq": {'values': [55,80]},
         }
     }
 

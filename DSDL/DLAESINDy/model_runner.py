@@ -6,7 +6,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 from aesindy.solvers import DatasetConstructor
 from aesindy.training import TrainModel
-from default_params import default_params as params
+from DSDL.DLAESINDy.default_params import default_params as params
 from aesindy.helper_functions import call_polygon
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -52,6 +52,7 @@ params['sindy_init_scale'] = 7.0
 params['sindycall_freq'] = 30
 params['future_steps'] = 8  # Number of future steps to predict
 params['loss_weight_prediction'] = 1.0  # Weight for future prediction loss
+params['prediction_mode'] = 'max'
 
 print(params)
 

@@ -26,7 +26,7 @@ default_params['n_ics'] = 5
 default_params['train_ratio'] = 0.8
 default_params['input_dim'] = 128 # Try 256
 default_params['poly_order'] = 2
-default_params['include_fourier'] = False
+default_params['include_fourier'] = True
 default_params['exact_features'] = False # Overrides poly_order
 
 default_params['svd_dim'] = None
@@ -53,8 +53,9 @@ default_params['loss_weight_integral'] = 0.0
 default_params['loss_weight_x0'] = 0.0  
 default_params['loss_weight_layer_l2'] = 0.0
 default_params['loss_weight_layer_l1'] = 0.0 
+default_params['loss_weight_prediction'] = 1.0
 
-default_params['activation'] = 'elu'
+default_params['activation'] = 'relu'
 default_params['widths_ratios'] = [0.5, 0.25]
 default_params['use_bias'] = True 
 
@@ -81,4 +82,6 @@ default_params['sindy_threshold'] = 0.4
 default_params['data_length'] = 1
 default_params['sindy_init_scale'] = 7.0
 default_params['n_frequencies'] = 2
+default_params['future_steps'] = 8  # Number of future steps to predict
+default_params['prediction_mode'] = 'close'
 
